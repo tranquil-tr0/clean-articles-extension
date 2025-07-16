@@ -19,6 +19,7 @@
     "wxt": "^0.20.6"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.6.0"
+    "@mozilla/readability": "^0.6.0",
+    "html2pdf.js": "^0.10.3"
   }
 }

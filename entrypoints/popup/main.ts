@@ -10,7 +10,7 @@ app.innerHTML = `
     <h1>Clean Articles</h1>
     <button id="reader-mode-btn" type="button">
       <img src="${readerModeIcon}" alt="Reader Mode" />
-      Enter Reader Mode
+      <span id="reader-mode-btn-label">Enter Reader Mode</span>
     </button>
     <button id="print-btn" type="button">
       <img src="${printIcon}" alt="Print Article" />
@@ -25,17 +25,41 @@ app.innerHTML = `
 
 // Add event listener for the reader mode button
 const readerModeBtn = document.getElementById('reader-mode-btn')!;
-readerModeBtn.addEventListener('click', async () => {
-  // Query the active tab
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (!tab.id) {
-    return;
-  }
+const readerModeBtnLabel = document.getElementById('reader-mode-btn-label')!;
 
-  // Send message to content script to activate reader mode
+let isReaderModeActive = false;
+
+// Query content script for Reader Mode state on popup load
+(async () => {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab.id) return;
   try {
-    await browser.tabs.sendMessage(tab.id, { action: 'extract-article-text' });
-    window.close(); // Close the popup
+    const response = await browser.tabs.sendMessage(tab.id, { action: 'is-reader-mode-active' });
+    if (response && response.active) {
+      isReaderModeActive = true;
+      readerModeBtnLabel.textContent = 'Exit Reader Mode';
+    } else {
+      isReaderModeActive = false;
+      readerModeBtnLabel.textContent = 'Enter Reader Mode';
+    }
+  } catch {
+    // If no response, assume not active
+    isReaderModeActive = false;
+    readerModeBtnLabel.textContent = 'Enter Reader Mode';
+  }
+})();
+
+readerModeBtn.addEventListener('click', async () => {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab.id) return;
+
+  try {
+    if (isReaderModeActive) {
+      await browser.tabs.sendMessage(tab.id, { action: 'exit-reader-mode' });
+    } else {
+      await browser.tabs.sendMessage(tab.id, { action: 'extract-article-text' });
+    }
+    window.close();
   } catch (err) {
     console.error('Error sending message to content script:', err);
   }
@@ -49,6 +73,13 @@ printBtn.addEventListener('click', () => {
 
 // Add event listener for the save as PDF button
 const savePdfBtn = document.getElementById('save-pdf-btn')!;
-savePdfBtn.addEventListener('click', () => {
-  window.print(); // The browser's print dialog should have a "Save as PDF" option
+savePdfBtn.addEventListener('click', async () => {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab.id) return;
+  try {
+    await browser.tabs.sendMessage(tab.id, { action: 'save-reader-pdf' });
+    window.close();
+  } catch (err) {
+    console.error('Error sending save-reader-pdf to content script:', err);
+  }
 });

@@ -8,6 +8,7 @@ import loraRegularUrl from '../assets/fonts/lora-v36-latin-regular.woff2';
 import loraBoldUrl from '../assets/fonts/lora-v36-latin-700.woff2';
 import { Readability } from '@mozilla/readability';
 import { storage } from '#imports';
+import html2pdf from 'html2pdf.js';
 
 interface ReaderModePreferences {
   hideLinks: boolean;
@@ -43,7 +44,177 @@ const preferencesStorage = storage.defineItem<ReaderModePreferences>(
 export default defineContentScript({
   matches: ['*://*/*'],
   main() {
-    browser.runtime.onMessage.addListener(async (message) => {
+    // Helper: check if Reader Mode is active (marker on <html>)
+    function isReaderModeActive() {
+      return document.documentElement.hasAttribute('data-reader-mode');
+    }
+
+    // Listen for message to enter reader mode for PDF
+    window.addEventListener('message', async (event) => {
+      if (event.data && event.data.action === 'enter-reader-mode-for-pdf') {
+        // This triggers the extract-article-text logic
+        const documentClone = document.cloneNode(true) as Document;
+        const article = new Readability(documentClone).parse();
+
+        if (article) {
+          const preferences = await preferencesStorage.getValue();
+
+          // Remove all <script>, <iframe>, <object>, <embed>, <link rel="import"> elements
+          const killSelectors = [
+            'script',
+            'iframe',
+            'object',
+            'embed',
+            'link[rel="import"]'
+          ];
+          killSelectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => el.remove());
+          });
+
+          // Clear all intervals and timeouts
+          for (let i = 1; i < 99999; i++) {
+            window.clearInterval(i);
+            window.clearTimeout(i);
+          }
+
+          // Remove all children from <html> (documentElement)
+          while (document.documentElement.firstChild) {
+            document.documentElement.removeChild(document.documentElement.firstChild);
+          }
+
+          // Create new <head> and <body>
+          const newHead = document.createElement('head');
+          const newBody = document.createElement('body');
+          document.documentElement.appendChild(newHead);
+          document.documentElement.appendChild(newBody);
+          // Mark Reader Mode as active
+          document.documentElement.setAttribute('data-reader-mode', 'true');
+
+          // Insert style into new head
+          const style = document.createElement('style');
+          // Use imported font URLs for @font-face rules
+          style.textContent = `
+    /* Local bundled fonts */
+    @font-face {
+      font-family: 'Inter';
+      src: url('${interRegularUrl}') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Inter';
+      src: url('${interBoldUrl}') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Roboto';
+      src: url('${robotoRegularUrl}') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Roboto';
+      src: url('${robotoBoldUrl}') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Merriweather';
+      src: url('${merriweatherRegularUrl}') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Merriweather';
+      src: url('${merriweatherBoldUrl}') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Lora';
+      src: url('${loraRegularUrl}') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Lora';
+      src: url('${loraBoldUrl}') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    `;
+          newHead.appendChild(style);
+
+          // ... (rest of the extract-article-text logic, including rendering the article and controls)
+          // After entering reader mode, the rest of the script will run as normal
+        }
+      }
+    });
+
+    // On load, if in reader mode and saveReaderPdfAfterReaderMode is set, export PDF and clear flag
+    if (
+      isReaderModeActive() &&
+      localStorage.getItem('saveReaderPdfAfterReaderMode') === 'true'
+    ) {
+      localStorage.removeItem('saveReaderPdfAfterReaderMode');
+      const contentDiv = document.getElementById('reader-mode-content');
+      if (contentDiv) {
+        import('html2pdf.js').then(({ default: html2pdf }) => {
+          html2pdf().from(contentDiv).set({
+            margin:       0,
+            filename:     'article.pdf',
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
+          }).save();
+        });
+      }
+    }
+
+    browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+      if (message.action === 'is-reader-mode-active') {
+        sendResponse({ active: isReaderModeActive() });
+        return true;
+      }
+      if (message.action === 'exit-reader-mode') {
+        if (isReaderModeActive()) {
+          window.location.reload();
+        }
+        sendResponse({ exited: true });
+        return true;
+      }
+      if (message.action === 'save-reader-pdf') {
+        if (isReaderModeActive()) {
+          const contentDiv = document.getElementById('reader-mode-content');
+          if (contentDiv) {
+            import('html2pdf.js').then(({ default: html2pdf }) => {
+              html2pdf().from(contentDiv).set({
+                margin:       0,
+                filename:     'article.pdf',
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
+              }).save();
+            });
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Reader mode content not found.' });
+          }
+        } else {
+          // Not in reader mode: set flag and trigger extract-article-text
+          localStorage.setItem('saveReaderPdfAfterReaderMode', 'true');
+          window.postMessage({ action: 'enter-reader-mode-for-pdf' }, '*');
+          // No sendResponse here, as the DOM is replaced
+        }
+        return true;
+      }
       if (message.action === 'extract-article-text') {
         const documentClone = document.cloneNode(true) as Document;
         const article = new Readability(documentClone).parse();
@@ -79,6 +250,8 @@ export default defineContentScript({
           const newBody = document.createElement('body');
           document.documentElement.appendChild(newHead);
           document.documentElement.appendChild(newBody);
+          // Mark Reader Mode as active
+          document.documentElement.setAttribute('data-reader-mode', 'true');
 
           // Insert style into new head
           const style = document.createElement('style');
@@ -326,6 +499,18 @@ newHead.appendChild(style);
 
           const controlsPanel = document.getElementById('reader-mode-controls')!;
           const togglePanelBtn = document.getElementById('reader-mode-toggle-panel')!;
+          const savePdfBtn = document.getElementById('save-pdf-btn');
+          if (savePdfBtn) {
+            savePdfBtn.addEventListener('click', () => {
+              // Export the reader mode content as PDF
+              html2pdf().from(contentDiv).set({
+                margin:       0,
+                filename:     'article.pdf',
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
+              }).save();
+            });
+          }
           const hidePanelBtn = document.getElementById('reader-mode-hide-panel')!;
           const exitBtn = document.getElementById('reader-mode-exit')!;
 
