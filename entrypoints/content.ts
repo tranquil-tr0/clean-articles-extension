@@ -181,7 +181,14 @@ export default defineContentScript({
         return true;
       }
       if (message.action === 'save-reader-pdf') {
-        // TODO: Implement save to PDF functionality here
+        const documentClone = document.cloneNode(true) as Document;
+        const article = new Readability(documentClone).parse();
+        if (article) {
+          sendResponse({ title: article.title, content: article.content });
+        } else {
+          sendResponse({ title: document.title, content: '' });
+        }
+        return true;
       }
       if (message.action === 'extract-article-text') {
         const documentClone = document.cloneNode(true) as Document;

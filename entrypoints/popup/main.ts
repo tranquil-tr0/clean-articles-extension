@@ -2,6 +2,7 @@ import './style.css';
 import readerModeIcon from '../../assets/file-text.svg';
 import printIcon from '../../assets/printer.svg';
 import savePdfIcon from '../../assets/file-type-pdf.svg';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // Add UI for entering reader mode
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -74,5 +75,87 @@ printBtn.addEventListener('click', () => {
 // Add event listener for the save as PDF button
 const savePdfBtn = document.getElementById('save-pdf-btn')!;
 savePdfBtn.addEventListener('click', async () => {
-  // TODO: Implement save as PDF functionality
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab.id) return;
+  try {
+    const response = await browser.tabs.sendMessage(tab.id, { action: 'save-reader-pdf' });
+    if (!response || !response.content) {
+      alert('Failed to extract article for PDF.');
+      return;
+    }
+
+    // Convert HTML content to plain text (basic, for MVP)
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = response.content;
+    const text = tempDiv.innerText || '';
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontSize = 14;
+    const margin = 40;
+    const maxWidth = width - margin * 2;
+
+    // Simple line wrapping
+    const lines = [];
+    let currentLine = '';
+    for (const word of text.split(/\s+/)) {
+      const testLine = currentLine ? currentLine + ' ' + word : word;
+      const size = font.widthOfTextAtSize(testLine, fontSize);
+      if (size > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    let y = height - margin;
+    let currentPage = page;
+
+    // Draw title on first page
+    currentPage.drawText(response.title, {
+      x: margin,
+      y: y,
+      size: fontSize + 4,
+      font,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+    y -= fontSize + 12;
+
+    for (const line of lines) {
+      if (y < margin) {
+        currentPage = pdfDoc.addPage();
+        y = height - margin;
+      }
+      currentPage.drawText(line, {
+        x: margin,
+        y: y,
+        size: fontSize,
+        font,
+        color: rgb(0.15, 0.15, 0.15),
+      });
+      y -= fontSize + 4;
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (response.title || 'article') + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+
+    window.close();
+  } catch (err) {
+    alert('Error saving PDF: ' + err);
+  }
 });
