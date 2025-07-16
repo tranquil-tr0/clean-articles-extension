@@ -79,8 +79,13 @@ savePdfBtn.addEventListener('click', async () => {
   if (!tab.id) return;
   try {
     const response = await browser.tabs.sendMessage(tab.id, { action: 'save-reader-pdf' });
-    if (!response || !response.content) {
-      alert('Failed to extract article for PDF.');
+    if (!response) {
+      alert('Failed to communicate with the content script. Please ensure the extension is allowed on this page and try again.');
+      return;
+    }
+    if (response.error) {
+      console.error('PDF export failed, response:', response);
+      alert('Failed to extract article for PDF.' + (response.error ? '\n' + response.error : ''));
       return;
     }
 
@@ -91,25 +96,49 @@ savePdfBtn.addEventListener('click', async () => {
       .map(el => (el as HTMLElement).innerText.trim())
       .filter(Boolean);
 
+    // Use reader mode preferences for styling
+    const prefs = response.preferences || {};
+    // Font mapping
+    let fontRef = StandardFonts.Helvetica;
+    if (prefs.fontFamily?.includes('serif') && !prefs.fontFamily?.includes('sans')) {
+      fontRef = StandardFonts.TimesRoman;
+    } else if (prefs.fontFamily?.includes('monospace')) {
+      fontRef = StandardFonts.Courier;
+    }
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
 
-    // Reader mode-like styling
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize = 16;
-    const titleFontSize = 24;
+    const font = await pdfDoc.embedFont(fontRef);
+    const fontSize = prefs.fontSize || 16;
+    const titleFontSize = Math.round(fontSize * 1.5);
     const lineHeight = fontSize * 1.6;
     const margin = 48;
-    const maxTextWidth = Math.min(700, width - margin * 2);
+    const maxTextWidth = Math.min(prefs.textWidth || 700, width - margin * 2);
 
-    // Simulate reader mode background (light beige)
+    // Parse color hex to rgb
+    function hexToRgb(hex: string, fallback: [number, number, number]) {
+      if (!hex || typeof hex !== 'string') return fallback;
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      if (c.length !== 6) return fallback;
+      const num = parseInt(c, 16);
+      return [
+        ((num >> 16) & 255) / 255,
+        ((num >> 8) & 255) / 255,
+        (num & 255) / 255,
+      ] as [number, number, number];
+    }
+    const bgColor = hexToRgb(prefs.backgroundColor, [0.965, 0.96, 0.949]);
+    const textColor = hexToRgb(prefs.textColor, [0.13, 0.13, 0.13]);
+
+    // Simulate reader mode background
     page.drawRectangle({
       x: 0,
       y: 0,
       width,
       height,
-      color: rgb(0.965, 0.96, 0.949), // #f6f5f2
+      color: rgb(...bgColor),
     });
 
     let y = height - margin;
@@ -121,10 +150,13 @@ savePdfBtn.addEventListener('click', async () => {
       y: y,
       size: titleFontSize,
       font,
-      color: rgb(0.13, 0.13, 0.13),
+      color: rgb(...textColor),
       maxWidth: maxTextWidth,
     });
     y -= titleFontSize + 18;
+
+    // Text alignment
+    let align = (prefs.textAlign || 'left') as 'left' | 'center' | 'justify';
 
     for (const para of paragraphs) {
       // Word wrap each paragraph
@@ -141,16 +173,20 @@ savePdfBtn.addEventListener('click', async () => {
               y: 0,
               width,
               height,
-              color: rgb(0.965, 0.96, 0.949),
+              color: rgb(...bgColor),
             });
             y = height - margin;
           }
+          let x = margin;
+          if (align === 'center') {
+            x = margin + (maxTextWidth - font.widthOfTextAtSize(line, fontSize)) / 2;
+          }
           currentPage.drawText(line, {
-            x: margin,
+            x,
             y: y,
             size: fontSize,
             font,
-            color: rgb(0.15, 0.15, 0.15),
+            color: rgb(...textColor),
             maxWidth: maxTextWidth,
           });
           y -= lineHeight;
@@ -167,16 +203,20 @@ savePdfBtn.addEventListener('click', async () => {
             y: 0,
             width,
             height,
-            color: rgb(0.965, 0.96, 0.949),
+            color: rgb(...bgColor),
           });
           y = height - margin;
         }
+        let x = margin;
+        if (align === 'center') {
+          x = margin + (maxTextWidth - font.widthOfTextAtSize(line, fontSize)) / 2;
+        }
         currentPage.drawText(line, {
-          x: margin,
+          x,
           y: y,
           size: fontSize,
           font,
-          color: rgb(0.15, 0.15, 0.15),
+          color: rgb(...textColor),
           maxWidth: maxTextWidth,
         });
         y -= lineHeight;
