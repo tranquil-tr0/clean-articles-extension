@@ -8,8 +8,6 @@ import loraRegularUrl from '../assets/fonts/lora-v36-latin-regular.woff2';
 import loraBoldUrl from '../assets/fonts/lora-v36-latin-700.woff2';
 import { Readability } from '@mozilla/readability';
 import { storage } from '#imports';
-import PDFDocument from 'pdfkit';
-import blobStream from 'blob-stream';
 
 interface ReaderModePreferences {
   hideLinks: boolean;
@@ -167,42 +165,7 @@ export default defineContentScript({
       localStorage.getItem('saveReaderPdfAfterReaderMode') === 'true'
     ) {
       localStorage.removeItem('saveReaderPdfAfterReaderMode');
-      const contentDiv = document.getElementById('reader-mode-content');
-      if (contentDiv) {
-        // Fetch and apply user preferences
-        preferencesStorage.getValue().then(prefs => {
-          contentDiv.style.backgroundColor = prefs.backgroundColor;
-          contentDiv.style.fontFamily = prefs.fontFamily;
-          contentDiv.style.fontSize = prefs.fontSize + 'px';
-          contentDiv.style.maxWidth = prefs.textWidth + 'px';
-          // Set image crossorigin for html2canvas
-          contentDiv.querySelectorAll('img').forEach(img => {
-            img.setAttribute('crossorigin', 'anonymous');
-          });
-          contentDiv.classList.add('pdf-export');
-          // PDFKit implementation
-          const doc = new PDFDocument({ size: 'A4', margin: 40 });
-          const stream = doc.pipe(blobStream());
-          doc.fontSize(prefs.fontSize || 16);
-          doc.font(prefs.fontFamily || 'Helvetica');
-          doc.text(contentDiv.innerText || '', { align: prefs.textAlign || 'left', width: prefs.textWidth || 800 });
-          doc.end();
-          stream.on('finish', function () {
-            const url = stream.toBlobURL('application/pdf');
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'article.pdf';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            contentDiv.classList.remove('pdf-export');
-            contentDiv.style.backgroundColor = '';
-            contentDiv.style.fontFamily = '';
-            contentDiv.style.fontSize = '';
-            contentDiv.style.maxWidth = '';
-          });
-        });
-      }
+      // TODO: Implement save to PDF functionality here
     }
 
     browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
@@ -218,187 +181,7 @@ export default defineContentScript({
         return true;
       }
       if (message.action === 'save-reader-pdf') {
-        // Use the current reader mode DOM if present
-        const contentDiv = document.getElementById('reader-mode-content');
-        const titleEl = document.getElementById('reader-mode-title');
-        let pdfTitle = 'article';
-        if (titleEl && titleEl.textContent) pdfTitle = titleEl.textContent;
-        if (contentDiv) {
-          // Clone the content to avoid UI changes
-          const exportDiv = contentDiv.cloneNode(true) as HTMLElement;
-
-          // Remove controls/buttons if present
-          exportDiv.querySelectorAll('#reader-mode-controls, #reader-mode-toggle-panel, #reader-mode-exit, button, input[type="button"]').forEach(el => el.remove());
-
-          // Remove any hidden/collapsed panels
-          exportDiv.querySelectorAll('.collapsed, .expanded').forEach(el => el.classList.remove('collapsed', 'expanded'));
-
-          // Remove inline styles that forcibly override user preferences
-          exportDiv.removeAttribute('style');
-
-          // Remove images if preference is set
-          const prefs = await preferencesStorage.getValue();
-          if (prefs.hideImages) {
-            exportDiv.querySelectorAll('img').forEach(el => el.remove());
-          }
-
-          // Remove buttons if preference is set
-          if (prefs.hideButtons) {
-            exportDiv.querySelectorAll('button, input[type="button"]').forEach(el => el.remove());
-          }
-
-          // Apply background and text color directly
-          exportDiv.style.backgroundColor = prefs.backgroundColor;
-          exportDiv.style.color = prefs.textColor;
-          exportDiv.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-          exportDiv.style.fontSize = prefs.fontSize ? `${prefs.fontSize}px` : "16px";
-          exportDiv.style.maxWidth = prefs.textWidth ? `${prefs.textWidth}px` : "800px";
-          exportDiv.style.textAlign = prefs.textAlign || "left";
-
-          // Compose a style block for system fonts
-          const pdfStyles = `
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background: ${prefs.backgroundColor};
-                color: ${prefs.textColor};
-                font-size: ${prefs.fontSize ? prefs.fontSize + 'px' : '16px'};
-                max-width: ${prefs.textWidth ? prefs.textWidth + 'px' : '800px'};
-                text-align: ${prefs.textAlign || 'left'};
-                margin: 0 auto;
-                padding: 32px 24px;
-                line-height: 1.7;
-                word-break: break-word;
-              }
-              h1, h2, h3, h4, h5, h6 {
-                font-family: inherit;
-                font-weight: 700;
-                margin-top: 1.5em;
-                margin-bottom: 0.5em;
-              }
-              p { margin: 1em 0; }
-              img { max-width: 100%; height: auto; display: block; margin: 1em 0; }
-              blockquote {
-                border-left: 4px solid #ccc;
-                margin: 1em 0;
-                padding-left: 1em;
-                color: #555;
-                font-style: italic;
-                background: rgba(0,0,0,0.03);
-              }
-              code, pre {
-                font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
-                background: #f4f4f4;
-                color: #222;
-                padding: 2px 4px;
-                border-radius: 4px;
-              }
-              a {
-                color: #1565c0;
-                text-decoration: underline;
-                word-break: break-all;
-              }
-            </style>
-          `;
-
-          // Compose HTML for jsPDF html()
-          const fullHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset='utf-8'>
-              <title>${pdfTitle}</title>
-              ${pdfStyles}
-            </head>
-            <body>
-              <h1>${pdfTitle}</h1>
-              ${exportDiv.innerHTML}
-            </body>
-            </html>
-          `;
-
-          // Create a container for jsPDF html()
-          const container = document.createElement('div');
-          container.innerHTML = fullHtml;
-
-          // Dynamically import jsPDF and use html() for selectable text
-          import('jspdf').then(({ jsPDF }) => {
-            const pdf = new jsPDF({
-              unit: 'pt',
-              format: 'a4',
-              orientation: 'portrait'
-            });
-            pdf.html(container, {
-              callback: function (pdfInstance: any) {
-                pdfInstance.save(`${(pdfTitle || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`);
-                sendResponse({ success: true });
-              },
-              x: 10,
-              y: 10,
-              width: 575, // ~210mm - 2*10pt margins
-              windowWidth: 800
-            });
-          }).catch((error: any) => {
-            sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
-          });
-          return true;
-        }
-        // Fallback: not in reader mode, use Readability as before
-        // Step 1: Extract article using Readability
-        const documentClone = document.cloneNode(true) as Document;
-        const article = new Readability(documentClone).parse();
-        if (!article || !article.title || !article.content) {
-          sendResponse({ success: false, error: 'Could not extract article.' });
-          return true;
-        }
-        // Step 2: Compose styled HTML for PDF
-        const pdfStyles = `
-          <style>
-            body { font-family: 'Times New Roman', serif; line-height: 1.6; margin: 20px; font-size: 14px; }
-            h1, h2, h3, h4, h5, h6 { font-family: Arial, sans-serif; margin-top: 1em; margin-bottom: 0.5em; }
-            p { margin-bottom: 1em; }
-            img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
-            a { text-decoration: none; color: black; }
-            pre, code { background-color: #f4f4f4; padding: 5px; border-radius: 3px; overflow-x: auto; }
-            blockquote { border-left: 5px solid #ccc; margin: 1.5em 10px; padding: 0.5em 10px; }
-          </style>
-        `;
-        const fullHtml = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset='utf-8'>
-            <title>${article.title}</title>
-            ${pdfStyles}
-          </head>
-          <body>
-            <h1>${article.title}</h1>
-            ${article.content}
-          </body>
-          </html>
-        `;
-        // Step 3: Create a container element for html2pdf
-        const container = document.createElement('div');
-        container.innerHTML = fullHtml;
-        // Step 4: Generate PDF using html2pdf.js
-        // PDFKit implementation
-        const doc = new PDFDocument({ size: 'LETTER', margin: 20 });
-        const stream = doc.pipe(blobStream());
-        doc.fontSize(16);
-        doc.font('Helvetica');
-        doc.text(container.innerText || '', { width: 800 });
-        doc.end();
-        stream.on('finish', function () {
-          const url = stream.toBlobURL('application/pdf');
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${(article.title || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          sendResponse({ success: true });
-        });
-        return true; // Keep message channel open for async response
+        // TODO: Implement save to PDF functionality here
       }
       if (message.action === 'extract-article-text') {
         const documentClone = document.cloneNode(true) as Document;
@@ -684,28 +467,6 @@ newHead.appendChild(style);
 
           const controlsPanel = document.getElementById('reader-mode-controls')!;
           const togglePanelBtn = document.getElementById('reader-mode-toggle-panel')!;
-          const savePdfBtn = document.getElementById('save-pdf-btn');
-          if (savePdfBtn) {
-            savePdfBtn.addEventListener('click', () => {
-              // Export the reader mode content as PDF
-              // PDFKit implementation
-              const doc = new PDFDocument({ size: 'A4', margin: 40 });
-              const stream = doc.pipe(blobStream());
-              doc.fontSize(16);
-              doc.font('Helvetica');
-              doc.text(contentDiv.innerText || '', { width: 800 });
-              doc.end();
-              stream.on('finish', function () {
-                const url = stream.toBlobURL('application/pdf');
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'article.pdf';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-              });
-            });
-          }
           const hidePanelBtn = document.getElementById('reader-mode-hide-panel')!;
           const exitBtn = document.getElementById('reader-mode-exit')!;
 
