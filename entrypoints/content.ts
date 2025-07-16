@@ -207,6 +207,8 @@ export default defineContentScript({
     </label>
     <label>Font Size: <input type="range" id="font-size" min="12" max="24" step="1"></label>
     <label>Text Width: <input type="range" id="text-width" min="400" max="1200" step="50"></label>
+    <hr>
+    <button id="reader-mode-exit" style="background:#d00;color:#fff;border:none;border-radius:6px;padding:8px 0;font-size:1em;font-family:inherit;cursor:pointer;">Exit Reader Mode</button>
   </div>
   <div id="reader-mode-container">
     <h1>${article.title}</h1>
@@ -231,6 +233,7 @@ export default defineContentScript({
           const controlsPanel = document.getElementById('reader-mode-controls')!;
           const togglePanelBtn = document.getElementById('reader-mode-toggle-panel')!;
           const hidePanelBtn = document.getElementById('reader-mode-hide-panel')!;
+          const exitBtn = document.getElementById('reader-mode-exit')!;
 
           // Panel show/hide logic
           const showPanel = () => {
@@ -303,6 +306,9 @@ export default defineContentScript({
             }
           });
           hidePanelBtn.addEventListener('click', hidePanel);
+          exitBtn.addEventListener('click', () => {
+            window.location.reload();
+          });
         }
       }
     });
