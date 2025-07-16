@@ -1,4 +1,3 @@
-// Import font files as URLs (if supported by build system)
 import interRegularUrl from '../assets/fonts/inter-v19-latin-regular.woff2';
 import interBoldUrl from '../assets/fonts/inter-v19-latin-700.woff2';
 import robotoRegularUrl from '../assets/fonts/roboto-v48-latin-regular.woff2';
@@ -351,35 +350,13 @@ newHead.appendChild(style);
             document.body.style.setProperty('--reader-text-align', prefs.textAlign);
             document.body.style.setProperty('--reader-text-color', prefs.textColor);
 
-            // Debug: Log fontFamily preference and computed style
-            console.log('[ReaderMode] prefs.fontFamily:', prefs.fontFamily);
-            const computedFont = window.getComputedStyle(document.body).fontFamily;
-            console.log('[ReaderMode] computed body font-family:', computedFont);
+            document.body.style.setProperty('--reader-bg-color', prefs.backgroundColor);
+            document.body.style.setProperty('--reader-font-family', prefs.fontFamily);
+            document.body.style.setProperty('--reader-font-size', `${prefs.fontSize}px`);
+            document.body.style.setProperty('--reader-text-width', `${prefs.textWidth}px`);
+            document.body.style.setProperty('--reader-text-align', prefs.textAlign);
+            document.body.style.setProperty('--reader-text-color', prefs.textColor);
 
-            // Check if Inter font is loaded (robust match)
-            console.log('[ReaderMode] fontFamily for font load check:', prefs.fontFamily);
-            if (prefs.fontFamily.includes('Inter')) {
-              document.fonts.load('1em Inter').then(fonts => {
-                console.log('[ReaderMode] Inter font loaded:', fonts.length > 0);
-              });
-            }
-            if (prefs.fontFamily.includes('Roboto')) {
-              document.fonts.load('1em Roboto').then(fonts => {
-                console.log('[ReaderMode] Roboto font loaded:', fonts.length > 0);
-              });
-            }
-            if (prefs.fontFamily.includes('Merriweather')) {
-              document.fonts.load('1em Merriweather').then(fonts => {
-                console.log('[ReaderMode] Merriweather font loaded:', fonts.length > 0);
-              });
-            }
-            if (prefs.fontFamily.includes('Lora')) {
-              document.fonts.load('1em Lora').then(fonts => {
-                console.log('[ReaderMode] Lora font loaded:', fonts.length > 0);
-              });
-            }
-
-            // Update control values to match preferences
             toggleLinks.checked = prefs.hideLinks;
             toggleButtons.checked = prefs.hideButtons;
             toggleImages.checked = prefs.hideImages;
@@ -391,7 +368,6 @@ newHead.appendChild(style);
             fontSizeSlider.value = String(prefs.fontSize);
             textWidthSlider.value = String(prefs.textWidth);
 
-            // Toggle content classes
             contentDiv.classList.toggle('hide-links', prefs.hideLinks);
             contentDiv.classList.toggle('hide-buttons', prefs.hideButtons);
             contentDiv.classList.toggle('hide-images', prefs.hideImages);
@@ -418,7 +394,6 @@ newHead.appendChild(style);
           bgColorPicker.addEventListener('input', () => makePreferenceUpdater('backgroundColor')(bgColorPicker.value));
           textColorPicker.addEventListener('input', () => makePreferenceUpdater('textColor')(textColorPicker.value));
           fontFamilySelector.addEventListener('change', () => {
-            console.log('[ReaderMode] fontFamilySelector changed to:', fontFamilySelector.value);
             makePreferenceUpdater('fontFamily')(fontFamilySelector.value);
           });
           fontSizeSlider.addEventListener('input', () => makePreferenceUpdater('fontSize')(parseInt(fontSizeSlider.value, 10)));
