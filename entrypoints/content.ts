@@ -218,108 +218,45 @@ export default defineContentScript({
         if (contentDiv) {
           // Clone the content to avoid UI changes
           const exportDiv = contentDiv.cloneNode(true) as HTMLElement;
+
           // Remove controls/buttons if present
-          exportDiv.querySelectorAll('#reader-mode-controls, #reader-mode-toggle-panel, #reader-mode-exit, button').forEach(el => el.remove());
+          exportDiv.querySelectorAll('#reader-mode-controls, #reader-mode-toggle-panel, #reader-mode-exit, button, input[type="button"]').forEach(el => el.remove());
+
           // Remove any hidden/collapsed panels
           exportDiv.querySelectorAll('.collapsed, .expanded').forEach(el => el.classList.remove('collapsed', 'expanded'));
+
           // Remove inline styles that forcibly override user preferences
           exportDiv.removeAttribute('style');
 
-          // --- Preserve links, images, and font choice ---
-          // 1. Links: Do not alter <a> tags, let them render as in the DOM
-          // 2. Images: Set crossorigin for all images to help with html2canvas
-          exportDiv.querySelectorAll('img').forEach(img => {
-            img.setAttribute('crossorigin', 'anonymous');
-            // If the image is hidden by a class, remove the class for PDF
-            img.classList.remove('hide-images');
-            // Remove display:none if present
-            if ((img as HTMLElement).style.display === 'none') {
-              (img as HTMLElement).style.display = '';
-            }
-          });
-          // 3. Font: Use the computed font-family from the contentDiv
-          const computed = window.getComputedStyle(contentDiv);
-          // Also preserve font-family for all children if set inline
-          exportDiv.querySelectorAll('[style]').forEach(el => {
-            const style = (el as HTMLElement).style;
-            if (style.fontFamily) {
-              style.fontFamily = style.fontFamily;
-            }
-          });
-
-          // --- Compose a style block that preserves user preferences and fonts ---
-          // Use the user's font choice, and add @font-face for bundled fonts
-          const fontFace = `
-            @font-face {
-              font-family: 'Inter';
-              src: url('${interRegularUrl}') format('woff2');
-              font-weight: 400;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Inter';
-              src: url('${interBoldUrl}') format('woff2');
-              font-weight: 700;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Roboto';
-              src: url('${robotoRegularUrl}') format('woff2');
-              font-weight: 400;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Roboto';
-              src: url('${robotoBoldUrl}') format('woff2');
-              font-weight: 700;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Merriweather';
-              src: url('${merriweatherRegularUrl}') format('woff2');
-              font-weight: 400;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Merriweather';
-              src: url('${merriweatherBoldUrl}') format('woff2');
-              font-weight: 700;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Lora';
-              src: url('${loraRegularUrl}') format('woff2');
-              font-weight: 400;
-              font-style: normal;
-              font-display: swap;
-            }
-            @font-face {
-              font-family: 'Lora';
-              src: url('${loraBoldUrl}') format('woff2');
-              font-weight: 700;
-              font-style: normal;
-              font-display: swap;
-            }
-          `;
-          // Use the actual user preference for font family, not the computed style (which may be inherited/overridden)
+          // Remove images if preference is set
           const prefs = await preferencesStorage.getValue();
-          const userFontFamily = prefs.fontFamily || computed.fontFamily;
+          if (prefs.hideImages) {
+            exportDiv.querySelectorAll('img').forEach(el => el.remove());
+          }
+
+          // Remove buttons if preference is set
+          if (prefs.hideButtons) {
+            exportDiv.querySelectorAll('button, input[type="button"]').forEach(el => el.remove());
+          }
+
+          // Apply background and text color directly
+          exportDiv.style.backgroundColor = prefs.backgroundColor;
+          exportDiv.style.color = prefs.textColor;
+          exportDiv.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+          exportDiv.style.fontSize = prefs.fontSize ? `${prefs.fontSize}px` : "16px";
+          exportDiv.style.maxWidth = prefs.textWidth ? `${prefs.textWidth}px` : "800px";
+          exportDiv.style.textAlign = prefs.textAlign || "left";
+
+          // Compose a style block for system fonts
           const pdfStyles = `
             <style>
-              ${fontFace}
               body {
-                background: ${computed.backgroundColor};
-                color: ${computed.color};
-                font-family: ${userFontFamily};
-                font-size: ${computed.fontSize};
-                max-width: ${computed.maxWidth};
-                text-align: ${computed.textAlign};
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: ${prefs.backgroundColor};
+                color: ${prefs.textColor};
+                font-size: ${prefs.fontSize ? prefs.fontSize + 'px' : '16px'};
+                max-width: ${prefs.textWidth ? prefs.textWidth + 'px' : '800px'};
+                text-align: ${prefs.textAlign || 'left'};
                 margin: 0 auto;
                 padding: 32px 24px;
                 line-height: 1.7;
@@ -355,6 +292,8 @@ export default defineContentScript({
               }
             </style>
           `;
+
+          // Compose HTML for jsPDF html()
           const fullHtml = `
             <!DOCTYPE html>
             <html>
@@ -369,19 +308,30 @@ export default defineContentScript({
             </body>
             </html>
           `;
+
+          // Create a container for jsPDF html()
           const container = document.createElement('div');
           container.innerHTML = fullHtml;
-          import('html2pdf.js').then(({ default: html2pdf }) => {
-            html2pdf().from(container).set({
-              margin: [20, 20, 20, 20],
-              filename: `${(pdfTitle || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`,
-              html2canvas: { scale: 2, useCORS: true, logging: true },
-              jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' }
-            }).save().then(() => {
-              sendResponse({ success: true });
-            }).catch((error: any) => {
-              sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
+
+          // Dynamically import jsPDF and use html() for selectable text
+          import('jspdf').then(({ jsPDF }) => {
+            const pdf = new jsPDF({
+              unit: 'pt',
+              format: 'a4',
+              orientation: 'portrait'
             });
+            pdf.html(container, {
+              callback: function (pdfInstance: any) {
+                pdfInstance.save(`${(pdfTitle || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`);
+                sendResponse({ success: true });
+              },
+              x: 10,
+              y: 10,
+              width: 575, // ~210mm - 2*10pt margins
+              windowWidth: 800
+            });
+          }).catch((error: any) => {
+            sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
           });
           return true;
         }

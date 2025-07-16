@@ -14,7 +14,13 @@ importers:
       html2pdf.js:
         specifier: ^0.10.3
         version: 0.10.3
+      jspdf:
+        specifier: ^3.0.1
+        version: 3.0.1
     devDependencies:
+      '@types/jspdf':
+        specifier: ^2.0.0
+        version: 2.0.0
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
@@ -381,6 +387,10 @@ packages:
 
   '@types/har-format@1.2.16':
     resolution: {integrity: sha512-fluxdy7ryD3MV6h8pTfTYpy/xQzCFC7m89nOH9y94cNqJ1mDIDPut7MnRHI3F6qRmh/cT2fUjG1MLdCNb4hE9A==}
+
+  '@types/jspdf@2.0.0':
+    resolution: {integrity: sha512-oonYDXI4GegGaG7FFVtriJ+Yqlh4YR3L3NVDiwCEBVG7sbya19SoGx4MW4kg1MCMRPgkbbFTck8YKJL8PrkDfA==}
+    deprecated: This is a stub types definition. jspdf provides its own type definitions, so you do not need this installed.
 
   '@types/minimatch@3.0.5':
     resolution: {integrity: sha512-Klz949h02Gz2uZCMGwDUSDS1YBlTdDDgbWHi+81l29tQALUtvz4rAYi5uoVhE5Lagoq6DeqAUlbrHvW/mXDgdQ==}
@@ -2196,6 +2206,10 @@ snapshots:
   '@types/filewriter@0.0.33': {}
 
   '@types/har-format@1.2.16': {}
+
+  '@types/jspdf@2.0.0':
+    dependencies:
+      jspdf: 3.0.1
 
   '@types/minimatch@3.0.5': {}
 
