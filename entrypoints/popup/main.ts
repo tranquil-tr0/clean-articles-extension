@@ -8,6 +8,12 @@ app.innerHTML = `
     <div class="card">
       <button id="reader-mode-btn" type="button">Enter Reader Mode</button>
     </div>
+    <div class="card">
+      <button id="print-btn" type="button">Print Article</button>
+    </div>
+    <div class="card">
+      <button id="save-pdf-btn" type="button">Save as PDF</button>
+    </div>
   </div>
 `;
 
@@ -27,4 +33,16 @@ readerModeBtn.addEventListener('click', async () => {
   } catch (err) {
     console.error('Error sending message to content script:', err);
   }
+});
+
+// Add event listener for the print button
+const printBtn = document.getElementById('print-btn')!;
+printBtn.addEventListener('click', () => {
+  window.print();
+});
+
+// Add event listener for the save as PDF button
+const savePdfBtn = document.getElementById('save-pdf-btn')!;
+savePdfBtn.addEventListener('click', () => {
+  window.print(); // The browser's print dialog should have a "Save as PDF" option
 });
