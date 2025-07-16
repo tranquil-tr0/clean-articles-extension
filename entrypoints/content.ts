@@ -1,9 +1,29 @@
 import { Readability } from '@mozilla/readability';
+import { storage } from '#imports';
+
+interface ReaderModePreferences {
+  hideLinks: boolean;
+  hideButtons: boolean;
+  hideImages: boolean;
+  hideCaptions: boolean;
+}
+
+const preferencesStorage = storage.defineItem<ReaderModePreferences>(
+  'local:readerModePreferences',
+  {
+    defaultValue: {
+      hideLinks: false,
+      hideButtons: true,
+      hideImages: false,
+      hideCaptions: false,
+    },
+  },
+);
 
 export default defineContentScript({
   matches: ['*://*/*'],
   main() {
-    browser.runtime.onMessage.addListener((message) => {
+    browser.runtime.onMessage.addListener(async (message) => {
       if (message.action === 'extract-article-text') {
         const documentClone = document.cloneNode(true) as Document;
         const article = new Readability(documentClone).parse();
@@ -54,12 +74,14 @@ export default defineContentScript({
           document.head.innerHTML = '';
           document.head.appendChild(style);
 
+          const preferences = await preferencesStorage.getValue();
+
           document.body.innerHTML = `
             <div id="reader-mode-controls">
-              <label><input type="checkbox" id="toggle-links"> Hide Links</label>
-              <label><input type="checkbox" id="toggle-buttons" checked> Hide Buttons</label>
-              <label><input type="checkbox" id="toggle-images"> Hide Images</label>
-              <label><input type="checkbox" id="toggle-captions"> Hide Image Captions</label>
+              <label><input type="checkbox" id="toggle-links" ${preferences.hideLinks ? 'checked' : ''}> Hide Links</label>
+              <label><input type="checkbox" id="toggle-buttons" ${preferences.hideButtons ? 'checked' : ''}> Hide Buttons</label>
+              <label><input type="checkbox" id="toggle-images" ${preferences.hideImages ? 'checked' : ''}> Hide Images</label>
+              <label><input type="checkbox" id="toggle-captions" ${preferences.hideCaptions ? 'checked' : ''}> Hide Image Captions</label>
             </div>
             <div id="reader-mode-container">
               <h1>${article.title}</h1>
@@ -74,22 +96,29 @@ export default defineContentScript({
           const toggleCaptions = document.getElementById('toggle-captions') as HTMLInputElement;
 
           // Initial state
-          contentDiv.classList.add('hide-buttons');
+          contentDiv.classList.toggle('hide-links', toggleLinks.checked);
+          contentDiv.classList.toggle('hide-buttons', toggleButtons.checked);
+          contentDiv.classList.toggle('hide-images', toggleImages.checked);
+          contentDiv.classList.toggle('hide-captions', toggleCaptions.checked);
 
-          toggleLinks.addEventListener('change', () => {
+          toggleLinks.addEventListener('change', async () => {
             contentDiv.classList.toggle('hide-links', toggleLinks.checked);
+            await preferencesStorage.setValue({ ...await preferencesStorage.getValue(), hideLinks: toggleLinks.checked });
           });
 
-          toggleButtons.addEventListener('change', () => {
+          toggleButtons.addEventListener('change', async () => {
             contentDiv.classList.toggle('hide-buttons', toggleButtons.checked);
+            await preferencesStorage.setValue({ ...await preferencesStorage.getValue(), hideButtons: toggleButtons.checked });
           });
 
-          toggleImages.addEventListener('change', () => {
+          toggleImages.addEventListener('change', async () => {
             contentDiv.classList.toggle('hide-images', toggleImages.checked);
+            await preferencesStorage.setValue({ ...await preferencesStorage.getValue(), hideImages: toggleImages.checked });
           });
 
-          toggleCaptions.addEventListener('change', () => {
+          toggleCaptions.addEventListener('change', async () => {
             contentDiv.classList.toggle('hide-captions', toggleCaptions.checked);
+            await preferencesStorage.setValue({ ...await preferencesStorage.getValue(), hideCaptions: toggleCaptions.checked });
           });
         }
       }
