@@ -91,3 +91,25 @@ button img {
     border-color: #5a9ee2;
   }
 }
+.pdf-export {
+  font-family: 'Lora', 'Merriweather', 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+  font-size: 16px !important;
+  line-height: 1.7 !important;
+  color: #222 !important;
+  background: #fff !important;
+  padding: 32px !important;
+  margin: 0 auto !important;
+  max-width: 700px !important;
+  box-sizing: border-box !important;
+}
+
+.pdf-export h1, .pdf-export h2, .pdf-export h3 {
+  font-family: inherit !important;
+  font-weight: 700 !important;
+  margin-top: 2em !important;
+  margin-bottom: 1em !important;
+}
+
+.pdf-export p {
+  margin: 1em 0 !important;
+}

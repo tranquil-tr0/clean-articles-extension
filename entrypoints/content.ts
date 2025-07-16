@@ -168,13 +168,31 @@ export default defineContentScript({
       localStorage.removeItem('saveReaderPdfAfterReaderMode');
       const contentDiv = document.getElementById('reader-mode-content');
       if (contentDiv) {
-        import('html2pdf.js').then(({ default: html2pdf }) => {
-          html2pdf().from(contentDiv).set({
-            margin:       0,
-            filename:     'article.pdf',
-            html2canvas:  { scale: 2, useCORS: true },
-            jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
-          }).save();
+        // Fetch and apply user preferences
+        preferencesStorage.getValue().then(prefs => {
+          contentDiv.style.backgroundColor = prefs.backgroundColor;
+          contentDiv.style.fontFamily = prefs.fontFamily;
+          contentDiv.style.fontSize = prefs.fontSize + 'px';
+          contentDiv.style.maxWidth = prefs.textWidth + 'px';
+          // Set image crossorigin for html2canvas
+          contentDiv.querySelectorAll('img').forEach(img => {
+            img.setAttribute('crossorigin', 'anonymous');
+          });
+          contentDiv.classList.add('pdf-export');
+          import('html2pdf.js').then(({ default: html2pdf }) => {
+            html2pdf().from(contentDiv).set({
+              margin:       0,
+              filename:     'article.pdf',
+              html2canvas:  { scale: 2, useCORS: true },
+              jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
+            }).save().finally(() => {
+              contentDiv.classList.remove('pdf-export');
+              contentDiv.style.backgroundColor = '';
+              contentDiv.style.fontFamily = '';
+              contentDiv.style.fontSize = '';
+              contentDiv.style.maxWidth = '';
+            });
+          });
         });
       }
     }
@@ -192,28 +210,232 @@ export default defineContentScript({
         return true;
       }
       if (message.action === 'save-reader-pdf') {
-        if (isReaderModeActive()) {
-          const contentDiv = document.getElementById('reader-mode-content');
-          if (contentDiv) {
-            import('html2pdf.js').then(({ default: html2pdf }) => {
-              html2pdf().from(contentDiv).set({
-                margin:       0,
-                filename:     'article.pdf',
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
-              }).save();
+        // Use the current reader mode DOM if present
+        const contentDiv = document.getElementById('reader-mode-content');
+        const titleEl = document.getElementById('reader-mode-title');
+        let pdfTitle = 'article';
+        if (titleEl && titleEl.textContent) pdfTitle = titleEl.textContent;
+        if (contentDiv) {
+          // Clone the content to avoid UI changes
+          const exportDiv = contentDiv.cloneNode(true) as HTMLElement;
+          // Remove controls/buttons if present
+          exportDiv.querySelectorAll('#reader-mode-controls, #reader-mode-toggle-panel, #reader-mode-exit, button').forEach(el => el.remove());
+          // Remove any hidden/collapsed panels
+          exportDiv.querySelectorAll('.collapsed, .expanded').forEach(el => el.classList.remove('collapsed', 'expanded'));
+          // Remove inline styles that forcibly override user preferences
+          exportDiv.removeAttribute('style');
+
+          // --- Preserve links, images, and font choice ---
+          // 1. Links: Do not alter <a> tags, let them render as in the DOM
+          // 2. Images: Set crossorigin for all images to help with html2canvas
+          exportDiv.querySelectorAll('img').forEach(img => {
+            img.setAttribute('crossorigin', 'anonymous');
+            // If the image is hidden by a class, remove the class for PDF
+            img.classList.remove('hide-images');
+            // Remove display:none if present
+            if ((img as HTMLElement).style.display === 'none') {
+              (img as HTMLElement).style.display = '';
+            }
+          });
+          // 3. Font: Use the computed font-family from the contentDiv
+          const computed = window.getComputedStyle(contentDiv);
+          // Also preserve font-family for all children if set inline
+          exportDiv.querySelectorAll('[style]').forEach(el => {
+            const style = (el as HTMLElement).style;
+            if (style.fontFamily) {
+              style.fontFamily = style.fontFamily;
+            }
+          });
+
+          // --- Compose a style block that preserves user preferences and fonts ---
+          // Use the user's font choice, and add @font-face for bundled fonts
+          const fontFace = `
+            @font-face {
+              font-family: 'Inter';
+              src: url('${interRegularUrl}') format('woff2');
+              font-weight: 400;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Inter';
+              src: url('${interBoldUrl}') format('woff2');
+              font-weight: 700;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Roboto';
+              src: url('${robotoRegularUrl}') format('woff2');
+              font-weight: 400;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Roboto';
+              src: url('${robotoBoldUrl}') format('woff2');
+              font-weight: 700;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Merriweather';
+              src: url('${merriweatherRegularUrl}') format('woff2');
+              font-weight: 400;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Merriweather';
+              src: url('${merriweatherBoldUrl}') format('woff2');
+              font-weight: 700;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Lora';
+              src: url('${loraRegularUrl}') format('woff2');
+              font-weight: 400;
+              font-style: normal;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Lora';
+              src: url('${loraBoldUrl}') format('woff2');
+              font-weight: 700;
+              font-style: normal;
+              font-display: swap;
+            }
+          `;
+          // Use the actual user preference for font family, not the computed style (which may be inherited/overridden)
+          const prefs = await preferencesStorage.getValue();
+          const userFontFamily = prefs.fontFamily || computed.fontFamily;
+          const pdfStyles = `
+            <style>
+              ${fontFace}
+              body {
+                background: ${computed.backgroundColor};
+                color: ${computed.color};
+                font-family: ${userFontFamily};
+                font-size: ${computed.fontSize};
+                max-width: ${computed.maxWidth};
+                text-align: ${computed.textAlign};
+                margin: 0 auto;
+                padding: 32px 24px;
+                line-height: 1.7;
+                word-break: break-word;
+              }
+              h1, h2, h3, h4, h5, h6 {
+                font-family: inherit;
+                font-weight: 700;
+                margin-top: 1.5em;
+                margin-bottom: 0.5em;
+              }
+              p { margin: 1em 0; }
+              img { max-width: 100%; height: auto; display: block; margin: 1em 0; }
+              blockquote {
+                border-left: 4px solid #ccc;
+                margin: 1em 0;
+                padding-left: 1em;
+                color: #555;
+                font-style: italic;
+                background: rgba(0,0,0,0.03);
+              }
+              code, pre {
+                font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace;
+                background: #f4f4f4;
+                color: #222;
+                padding: 2px 4px;
+                border-radius: 4px;
+              }
+              a {
+                color: #1565c0;
+                text-decoration: underline;
+                word-break: break-all;
+              }
+            </style>
+          `;
+          const fullHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset='utf-8'>
+              <title>${pdfTitle}</title>
+              ${pdfStyles}
+            </head>
+            <body>
+              <h1>${pdfTitle}</h1>
+              ${exportDiv.innerHTML}
+            </body>
+            </html>
+          `;
+          const container = document.createElement('div');
+          container.innerHTML = fullHtml;
+          import('html2pdf.js').then(({ default: html2pdf }) => {
+            html2pdf().from(container).set({
+              margin: [20, 20, 20, 20],
+              filename: `${(pdfTitle || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`,
+              html2canvas: { scale: 2, useCORS: true, logging: true },
+              jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' }
+            }).save().then(() => {
+              sendResponse({ success: true });
+            }).catch((error: any) => {
+              sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
             });
-            sendResponse({ success: true });
-          } else {
-            sendResponse({ success: false, error: 'Reader mode content not found.' });
-          }
-        } else {
-          // Not in reader mode: set flag and trigger extract-article-text
-          localStorage.setItem('saveReaderPdfAfterReaderMode', 'true');
-          browser.runtime.sendMessage({ action: 'extract-article-text' });
-          // No sendResponse here, as the DOM is replaced
+          });
+          return true;
         }
-        return true;
+        // Fallback: not in reader mode, use Readability as before
+        // Step 1: Extract article using Readability
+        const documentClone = document.cloneNode(true) as Document;
+        const article = new Readability(documentClone).parse();
+        if (!article || !article.title || !article.content) {
+          sendResponse({ success: false, error: 'Could not extract article.' });
+          return true;
+        }
+        // Step 2: Compose styled HTML for PDF
+        const pdfStyles = `
+          <style>
+            body { font-family: 'Times New Roman', serif; line-height: 1.6; margin: 20px; font-size: 14px; }
+            h1, h2, h3, h4, h5, h6 { font-family: Arial, sans-serif; margin-top: 1em; margin-bottom: 0.5em; }
+            p { margin-bottom: 1em; }
+            img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
+            a { text-decoration: none; color: black; }
+            pre, code { background-color: #f4f4f4; padding: 5px; border-radius: 3px; overflow-x: auto; }
+            blockquote { border-left: 5px solid #ccc; margin: 1.5em 10px; padding: 0.5em 10px; }
+          </style>
+        `;
+        const fullHtml = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset='utf-8'>
+            <title>${article.title}</title>
+            ${pdfStyles}
+          </head>
+          <body>
+            <h1>${article.title}</h1>
+            ${article.content}
+          </body>
+          </html>
+        `;
+        // Step 3: Create a container element for html2pdf
+        const container = document.createElement('div');
+        container.innerHTML = fullHtml;
+        // Step 4: Generate PDF using html2pdf.js
+        import('html2pdf.js').then(({ default: html2pdf }) => {
+          html2pdf().from(container).set({
+            margin: [20, 20, 20, 20],
+            filename: `${(article.title || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`,
+            html2canvas: { scale: 2, useCORS: true, logging: true },
+            jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' }
+          }).save().then(() => {
+            sendResponse({ success: true });
+          }).catch((error: any) => {
+            sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
+          });
+        });
+        return true; // Keep message channel open for async response
       }
       if (message.action === 'extract-article-text') {
         const documentClone = document.cloneNode(true) as Document;
