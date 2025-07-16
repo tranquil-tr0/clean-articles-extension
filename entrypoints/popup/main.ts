@@ -2,6 +2,9 @@ import './style.css';
 import readerModeIcon from '../../assets/file-text.svg';
 import printIcon from '../../assets/printer.svg';
 import savePdfIcon from '../../assets/file-type-pdf.svg';
+import fontkit from '@pdf-lib/fontkit';
+import interRegularTtf from '../../assets/fonts/inter-v19-latin-regular.ttf';
+import interRegular from '../../assets/fonts/inter-v19-latin-regular.woff2';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // Add UI for entering reader mode
@@ -76,6 +79,8 @@ printBtn.addEventListener('click', () => {
 const savePdfBtn = document.getElementById('save-pdf-btn')!;
 savePdfBtn.addEventListener('click', async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    console.log('[POPUP DEBUG] PDF export handler triggered');
+    console.log('interRegularTtf import:', typeof interRegularTtf, interRegularTtf);
   if (!tab.id) return;
   try {
     console.log('[POPUP DEBUG] Sending save-reader-pdf message to tab', tab.id);
@@ -96,15 +101,20 @@ savePdfBtn.addEventListener('click', async () => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = response.content;
     const text = tempDiv.innerText || '';
-
-    const pdfDoc = await PDFDocument.create();
+        const pdfDoc = await PDFDocument.create();
+        pdfDoc.registerFontkit(fontkit);
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
 
     // Font mapping
     let font;
     let fontFamily = (preferences.fontFamily || '').toLowerCase();
-    if (fontFamily.includes('serif') && !fontFamily.includes('sans')) {
+    if (fontFamily.includes('inter')) {
+      // interRegularTtf is a URL string, fetch as ArrayBuffer
+      const fontBytes = await fetch(interRegularTtf).then(r => r.arrayBuffer());
+      console.log('Inter TTF fetched byteLength:', fontBytes.byteLength);
+      font = await pdfDoc.embedFont(fontBytes);
+    } else if (fontFamily.includes('serif') && !fontFamily.includes('sans')) {
       font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
     } else if (fontFamily.includes('mono')) {
       font = await pdfDoc.embedFont(StandardFonts.Courier);
@@ -142,66 +152,9 @@ savePdfBtn.addEventListener('click', async () => {
       color: bgColor,
     });
 
-    // Simple line wrapping
-    const lines = [];
-    let currentLine = '';
-    for (const word of text.split(/\s+/)) {
-      const testLine = currentLine ? currentLine + ' ' + word : word;
-      const size = font.widthOfTextAtSize(testLine, fontSize);
-      if (size > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
-    }
-    if (currentLine) lines.push(currentLine);
-
+    // Use new recursive HTML-to-PDF renderer
     let y = height - margin;
-    let currentPage = page;
-
-    // Draw title on first page
-    currentPage.drawText(response.title, {
-      x: margin,
-      y: y,
-      size: fontSize + 4,
-      font,
-      color: titleColor,
-    });
-    y -= fontSize + 12;
-
-    // Text alignment
-    let align = (preferences.textAlign || 'left');
-    for (const line of lines) {
-      if (y < margin) {
-        currentPage = pdfDoc.addPage();
-        // Draw background for new page
-        currentPage.drawRectangle({
-          x: 0,
-          y: 0,
-          width,
-          height,
-          color: bgColor,
-        });
-        y = height - margin;
-      }
-      let x = margin;
-      if (align === 'center') {
-        const lineWidth = font.widthOfTextAtSize(line, fontSize);
-        x = margin + (maxWidth - lineWidth) / 2;
-      } else if (align === 'right') {
-        const lineWidth = font.widthOfTextAtSize(line, fontSize);
-        x = margin + (maxWidth - lineWidth);
-      }
-      currentPage.drawText(line, {
-        x,
-        y: y,
-        size: fontSize,
-        font,
-        color: textColor,
-      });
-      y -= fontSize + 4;
-    }
+    await renderHtmlToPdf(tempDiv, pdfDoc, page, font, fontSize, margin, maxWidth, y);
 
     const pdfBytes = await pdfDoc.save();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
@@ -222,3 +175,105 @@ savePdfBtn.addEventListener('click', async () => {
     alert('Error saving PDF: ' + err);
   }
 });
+
+
+import { degrees } from 'pdf-lib'; // For image rotation if needed
+
+async function fetchImageAsBytes(src: string): Promise<Uint8Array | null> {
+  try {
+    const resp = await fetch(src);
+    if (!resp.ok) return null;
+    return new Uint8Array(await resp.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+// Minimal recursive HTML-to-PDF renderer for <p>, <h1>, <img>
+async function renderHtmlToPdf(
+  root: HTMLElement,
+  pdfDoc: PDFDocument,
+  page: any,
+  font: any,
+  fontSize: number,
+  margin: number,
+  maxWidth: number,
+  y: number,
+  options: any = {}
+) {
+  let currentY = y;
+  for (const el of Array.from(root.children)) {
+    if (el.tagName === 'P') {
+      const text = el.textContent || '';
+      const lines = [];
+      let currentLine = '';
+      for (const word of text.split(/\s+/)) {
+        const testLine = currentLine ? currentLine + ' ' + word : word;
+        const size = font.widthOfTextAtSize(testLine, fontSize);
+        if (size > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+      for (const line of lines) {
+        if (currentY < margin) {
+          page = pdfDoc.addPage();
+          currentY = page.getSize().height - margin;
+        }
+        page.drawText(line, {
+          x: margin,
+          y: currentY,
+          size: fontSize,
+          font,
+        });
+        currentY -= fontSize + 4;
+      }
+      currentY -= 4;
+    } else if (el.tagName === 'H1') {
+      const text = el.textContent || '';
+      const h1Size = fontSize + 8;
+      if (currentY < margin + h1Size) {
+        page = pdfDoc.addPage();
+        currentY = page.getSize().height - margin;
+      }
+      page.drawText(text, {
+        x: margin,
+        y: currentY,
+        size: h1Size,
+        font,
+      });
+      currentY -= h1Size + 8;
+    } else if (el.tagName === 'IMG') {
+      const src = (el as HTMLImageElement).src;
+      const imgBytes = await fetchImageAsBytes(src);
+      if (imgBytes) {
+        let pdfImg;
+        if (src.endsWith('.png')) {
+          pdfImg = await pdfDoc.embedPng(imgBytes);
+        } else {
+          pdfImg = await pdfDoc.embedJpg(imgBytes);
+        }
+        const imgWidth = Math.min(pdfImg.width, maxWidth);
+        const imgHeight = (pdfImg.height / pdfImg.width) * imgWidth;
+        if (currentY - imgHeight < margin) {
+          page = pdfDoc.addPage();
+          currentY = page.getSize().height - margin;
+        }
+        page.drawImage(pdfImg, {
+          x: margin,
+          y: currentY - imgHeight,
+          width: imgWidth,
+          height: imgHeight,
+        });
+        currentY -= imgHeight + 12;
+      }
+    } else {
+      // Recursively handle children of other elements
+      currentY = await renderHtmlToPdf(el as HTMLElement, pdfDoc, page, font, fontSize, margin, maxWidth, currentY, options);
+    }
+  }
+  return currentY;
+}
