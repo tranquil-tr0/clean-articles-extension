@@ -24,6 +24,12 @@ importers:
         specifier: ^0.17.1
         version: 0.17.1
     devDependencies:
+      '@types/blob-stream':
+        specifier: ^0.1.33
+        version: 0.1.33
+      '@types/pdfkit':
+        specifier: ^0.17.0
+        version: 0.17.0
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
@@ -382,6 +388,9 @@ packages:
   '@swc/helpers@0.5.17':
     resolution: {integrity: sha512-5IKx/Y13RsYd+sauPb2x+U/xZikHjolzfuDgTAl/Tdf3Q8rslRvC19NKDLgAJQ6wsqADk10ntlv08nPFw/gO/A==}
 
+  '@types/blob-stream@0.1.33':
+    resolution: {integrity: sha512-HNHZ1S6W7F8PhxdyAastunpUC8cAZim78UIfqbL79gLzylp8EZep68yxAh11hTRoEvsqHAg/MECgmKF8+V0HzQ==}
+
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
@@ -399,6 +408,9 @@ packages:
 
   '@types/node@24.0.14':
     resolution: {integrity: sha512-4zXMWD91vBLGRtHK3YbIoFMia+1nqEz72coM42C5ETjnNCa/heoj7NT1G67iAfOqMmcfhuCZ4uNpyz8EjlAejw==}
+
+  '@types/pdfkit@0.17.0':
+    resolution: {integrity: sha512-krED/Otct47bF6yVQNWD34k2+bdyMt1isBvRoC/PubRO37uCNUg2FOtbjn+OPWEXb947QIhQ09q8SOWYXX8B1A==}
 
   '@types/raf@3.4.3':
     resolution: {integrity: sha512-c4YAvMedbPZ5tEyxzQdMoOhhJ4RD3rngZIdwC2/qDN3d7JpEhB6fiBRKVY1lg5B7Wk+uPBjn5f39j1/2MY1oOw==}
@@ -2259,6 +2271,10 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@types/blob-stream@0.1.33':
+    dependencies:
+      '@types/node': 24.0.14
+
   '@types/estree@1.0.8': {}
 
   '@types/filesystem@0.0.36':
@@ -2274,6 +2290,10 @@ snapshots:
   '@types/node@24.0.14':
     dependencies:
       undici-types: 7.8.0
+
+  '@types/pdfkit@0.17.0':
+    dependencies:
+      '@types/node': 24.0.14
 
   '@types/raf@3.4.3':
     optional: true

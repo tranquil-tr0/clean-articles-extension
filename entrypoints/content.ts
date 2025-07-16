@@ -8,7 +8,8 @@ import loraRegularUrl from '../assets/fonts/lora-v36-latin-regular.woff2';
 import loraBoldUrl from '../assets/fonts/lora-v36-latin-700.woff2';
 import { Readability } from '@mozilla/readability';
 import { storage } from '#imports';
-import html2pdf from 'html2pdf.js';
+import PDFDocument from 'pdfkit';
+import blobStream from 'blob-stream';
 
 interface ReaderModePreferences {
   hideLinks: boolean;
@@ -179,19 +180,26 @@ export default defineContentScript({
             img.setAttribute('crossorigin', 'anonymous');
           });
           contentDiv.classList.add('pdf-export');
-          import('html2pdf.js').then(({ default: html2pdf }) => {
-            html2pdf().from(contentDiv).set({
-              margin:       0,
-              filename:     'article.pdf',
-              html2canvas:  { scale: 2, useCORS: true },
-              jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
-            }).save().finally(() => {
-              contentDiv.classList.remove('pdf-export');
-              contentDiv.style.backgroundColor = '';
-              contentDiv.style.fontFamily = '';
-              contentDiv.style.fontSize = '';
-              contentDiv.style.maxWidth = '';
-            });
+          // PDFKit implementation
+          const doc = new PDFDocument({ size: 'A4', margin: 40 });
+          const stream = doc.pipe(blobStream());
+          doc.fontSize(prefs.fontSize || 16);
+          doc.font(prefs.fontFamily || 'Helvetica');
+          doc.text(contentDiv.innerText || '', { align: prefs.textAlign || 'left', width: prefs.textWidth || 800 });
+          doc.end();
+          stream.on('finish', function () {
+            const url = stream.toBlobURL('application/pdf');
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'article.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            contentDiv.classList.remove('pdf-export');
+            contentDiv.style.backgroundColor = '';
+            contentDiv.style.fontFamily = '';
+            contentDiv.style.fontSize = '';
+            contentDiv.style.maxWidth = '';
           });
         });
       }
@@ -401,17 +409,22 @@ export default defineContentScript({
         const container = document.createElement('div');
         container.innerHTML = fullHtml;
         // Step 4: Generate PDF using html2pdf.js
-        import('html2pdf.js').then(({ default: html2pdf }) => {
-          html2pdf().from(container).set({
-            margin: [20, 20, 20, 20],
-            filename: `${(article.title || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`,
-            html2canvas: { scale: 2, useCORS: true, logging: true },
-            jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' }
-          }).save().then(() => {
-            sendResponse({ success: true });
-          }).catch((error: any) => {
-            sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
-          });
+        // PDFKit implementation
+        const doc = new PDFDocument({ size: 'LETTER', margin: 20 });
+        const stream = doc.pipe(blobStream());
+        doc.fontSize(16);
+        doc.font('Helvetica');
+        doc.text(container.innerText || '', { width: 800 });
+        doc.end();
+        stream.on('finish', function () {
+          const url = stream.toBlobURL('application/pdf');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(article.title || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          sendResponse({ success: true });
         });
         return true; // Keep message channel open for async response
       }
@@ -703,12 +716,22 @@ newHead.appendChild(style);
           if (savePdfBtn) {
             savePdfBtn.addEventListener('click', () => {
               // Export the reader mode content as PDF
-              html2pdf().from(contentDiv).set({
-                margin:       0,
-                filename:     'article.pdf',
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'pt', format: 'a4', orientation: 'portrait' }
-              }).save();
+              // PDFKit implementation
+              const doc = new PDFDocument({ size: 'A4', margin: 40 });
+              const stream = doc.pipe(blobStream());
+              doc.fontSize(16);
+              doc.font('Helvetica');
+              doc.text(contentDiv.innerText || '', { width: 800 });
+              doc.end();
+              stream.on('finish', function () {
+                const url = stream.toBlobURL('application/pdf');
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'article.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              });
             });
           }
           const hidePanelBtn = document.getElementById('reader-mode-hide-panel')!;
