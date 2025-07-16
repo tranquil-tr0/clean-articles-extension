@@ -239,23 +239,48 @@ export default defineContentScript({
             exportDiv.querySelectorAll('button, input[type="button"]').forEach(el => el.remove());
           }
 
-          // Apply background and text color directly
-          exportDiv.style.backgroundColor = prefs.backgroundColor;
-          exportDiv.style.color = prefs.textColor;
-          exportDiv.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-          exportDiv.style.fontSize = prefs.fontSize ? `${prefs.fontSize}px` : "16px";
-          exportDiv.style.maxWidth = prefs.textWidth ? `${prefs.textWidth}px` : "800px";
-          exportDiv.style.textAlign = prefs.textAlign || "left";
+          // Wait for all images to load
+          const images = Array.from(exportDiv.querySelectorAll('img'));
+          await Promise.all(images.map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise(resolve => {
+              img.onload = img.onerror = resolve;
+            });
+          }));
 
-          // Compose a style block for system fonts
+          // Attach exportDiv to DOM off-screen for layout accuracy
+          exportDiv.style.position = 'fixed';
+          exportDiv.style.left = '-9999px';
+          exportDiv.style.top = '0';
+          document.body.appendChild(exportDiv);
+
+          // Embed Inter font as base64
+          const interRegularBase64 = 'data:font/woff2;base64,PASTE_INTER_REGULAR_BASE64_HERE';
+          const interBoldBase64 = 'data:font/woff2;base64,PASTE_INTER_BOLD_BASE64_HERE';
+
+          // Compose a style block for Inter font and background
           const pdfStyles = `
             <style>
+              @font-face {
+                font-family: 'Inter';
+                src: url('${interRegularBase64}') format('woff2');
+                font-weight: 400;
+                font-style: normal;
+                font-display: swap;
+              }
+              @font-face {
+                font-family: 'Inter';
+                src: url('${interBoldBase64}') format('woff2');
+                font-weight: 700;
+                font-style: normal;
+                font-display: swap;
+              }
               body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 background: ${prefs.backgroundColor};
                 color: ${prefs.textColor};
                 font-size: ${prefs.fontSize ? prefs.fontSize + 'px' : '16px'};
-                max-width: ${prefs.textWidth ? prefs.textWidth + 'px' : '800px'};
+                width: ${prefs.textWidth ? prefs.textWidth + 'px' : '800px'};
                 text-align: ${prefs.textAlign || 'left'};
                 margin: 0 auto;
                 padding: 32px 24px;
@@ -324,14 +349,17 @@ export default defineContentScript({
               callback: function (pdfInstance: any) {
                 pdfInstance.save(`${(pdfTitle || 'article').replace(/[^a-z0-9]/gi, '_')}.pdf`);
                 sendResponse({ success: true });
+                // Clean up exportDiv from DOM
+                if (exportDiv.parentNode) exportDiv.parentNode.removeChild(exportDiv);
               },
               x: 10,
               y: 10,
-              width: 575, // ~210mm - 2*10pt margins
-              windowWidth: 800
+              width: prefs.textWidth ? prefs.textWidth : 800,
+              windowWidth: prefs.textWidth ? prefs.textWidth : 800
             });
           }).catch((error: any) => {
             sendResponse({ success: false, error: error && error.message ? error.message : String(error) });
+            if (exportDiv.parentNode) exportDiv.parentNode.removeChild(exportDiv);
           });
           return true;
         }
