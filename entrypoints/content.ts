@@ -43,6 +43,36 @@ export default defineContentScript({
         if (article) {
           const preferences = await preferencesStorage.getValue();
 
+          // Remove all <script>, <iframe>, <object>, <embed>, <link rel="import"> elements
+          const killSelectors = [
+            'script',
+            'iframe',
+            'object',
+            'embed',
+            'link[rel="import"]'
+          ];
+          killSelectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => el.remove());
+          });
+
+          // Clear all intervals and timeouts
+          for (let i = 1; i < 99999; i++) {
+            window.clearInterval(i);
+            window.clearTimeout(i);
+          }
+
+          // Remove all children from <html> (documentElement)
+          while (document.documentElement.firstChild) {
+            document.documentElement.removeChild(document.documentElement.firstChild);
+          }
+
+          // Create new <head> and <body>
+          const newHead = document.createElement('head');
+          const newBody = document.createElement('body');
+          document.documentElement.appendChild(newHead);
+          document.documentElement.appendChild(newBody);
+
+          // Insert style into new head
           const style = document.createElement('style');
           style.textContent = `
             body {
@@ -172,48 +202,47 @@ export default defineContentScript({
               display: none;
             }
           `;
+          newHead.appendChild(style);
 
-          document.head.innerHTML = '';
-          document.head.appendChild(style);
-
-          document.body.innerHTML = `
-  <button id="reader-mode-toggle-panel" aria-label="Show/hide reader options" style="position:fixed;top:20px;right:20px;z-index:10001;background:#fff;border:none;border-radius:50%;width:40px;height:40px;box-shadow:0 2px 8px rgba(0,0,0,0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.2s;"><span id="reader-mode-toggle-icon" style="font-size:1.5em;display:flex;align-items:center;justify-content:center;width:24px;height:24px;line-height:1;">&#9776;</span></button>
-  <div id="reader-mode-controls" class="collapsed">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <strong style="font-size:1.1em;font-family:inherit;">Reader Options</strong>
-      <button id="reader-mode-hide-panel" aria-label="Hide options"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg></button>
-    </div>
-    <hr>
-    <label><input type="checkbox" id="toggle-links"> Hide Links</label>
-    <label><input type="checkbox" id="toggle-buttons"> Hide Buttons</label>
-    <label><input type="checkbox" id="toggle-images"> Hide Images</label>
-    <label><input type="checkbox" id="toggle-captions"> Hide Image Captions</label>
-    <hr>
-    <label>Text Align: 
-      <select id="text-align">
-        <option value="left">Left</option>
-        <option value="center">Center</option>
-        <option value="justify">Justify</option>
-      </select>
-    </label>
-    <label>Background: <input type="color" id="bg-color"></label>
-    <label>Text Color: <input type="color" id="text-color"></label>
-    <label>Font: 
-      <select id="font-family">
-        <option value="sans-serif">Sans Serif</option>
-        <option value="serif">Serif</option>
-        <option value="monospace">Monospace</option>
-      </select>
-    </label>
-    <label>Font Size: <input type="range" id="font-size" min="12" max="24" step="1"></label>
-    <label>Text Width: <input type="range" id="text-width" min="400" max="1200" step="50"></label>
-    <hr>
-    <button id="reader-mode-exit" style="background:#d00;color:#fff;border:none;border-radius:6px;padding:8px 0;font-size:1em;font-family:inherit;cursor:pointer;">Exit Reader Mode</button>
+          // Insert reader mode UI into new body
+          newBody.innerHTML = `
+<button id="reader-mode-toggle-panel" aria-label="Show/hide reader options" style="position:fixed;top:20px;right:20px;z-index:10001;background:#fff;border:none;border-radius:50%;width:40px;height:40px;box-shadow:0 2px 8px rgba(0,0,0,0.12);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.2s;"><span id="reader-mode-toggle-icon" style="font-size:1.5em;display:flex;align-items:center;justify-content:center;width:24px;height:24px;line-height:1;">&#9776;</span></button>
+<div id="reader-mode-controls" class="collapsed">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <strong style="font-size:1.1em;font-family:inherit;">Reader Options</strong>
+    <button id="reader-mode-hide-panel" aria-label="Hide options"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg></button>
   </div>
-  <div id="reader-mode-container">
-    <h1>${article.title}</h1>
-    <div id="reader-mode-content">${article.content}</div>
-  </div>
+  <hr>
+  <label><input type="checkbox" id="toggle-links"> Hide Links</label>
+  <label><input type="checkbox" id="toggle-buttons"> Hide Buttons</label>
+  <label><input type="checkbox" id="toggle-images"> Hide Images</label>
+  <label><input type="checkbox" id="toggle-captions"> Hide Image Captions</label>
+  <hr>
+  <label>Text Align: 
+    <select id="text-align">
+      <option value="left">Left</option>
+      <option value="center">Center</option>
+      <option value="justify">Justify</option>
+    </select>
+  </label>
+  <label>Background: <input type="color" id="bg-color"></label>
+  <label>Text Color: <input type="color" id="text-color"></label>
+  <label>Font: 
+    <select id="font-family">
+      <option value="sans-serif">Sans Serif</option>
+      <option value="serif">Serif</option>
+      <option value="monospace">Monospace</option>
+    </select>
+  </label>
+  <label>Font Size: <input type="range" id="font-size" min="12" max="24" step="1"></label>
+  <label>Text Width: <input type="range" id="text-width" min="400" max="1200" step="50"></label>
+  <hr>
+  <button id="reader-mode-exit" style="background:#d00;color:#fff;border:none;border-radius:6px;padding:8px 0;font-size:1em;font-family:inherit;cursor:pointer;">Exit Reader Mode</button>
+</div>
+<div id="reader-mode-container">
+  <h1>${article.title}</h1>
+  <div id="reader-mode-content">${article.content}</div>
+</div>
 `;
 
           const contentDiv = document.getElementById('reader-mode-content')!;
