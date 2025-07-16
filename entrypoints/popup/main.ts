@@ -1,19 +1,25 @@
 import './style.css';
+import readerModeIcon from '../../assets/file-text.svg';
+import printIcon from '../../assets/printer.svg';
+import savePdfIcon from '../../assets/file-type-pdf.svg';
 
 // Add UI for entering reader mode
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
-  <div>
+  <div class="container">
     <h1>Clean Articles</h1>
-    <div class="card">
-      <button id="reader-mode-btn" type="button">Enter Reader Mode</button>
-    </div>
-    <div class="card">
-      <button id="print-btn" type="button">Print Article</button>
-    </div>
-    <div class="card">
-      <button id="save-pdf-btn" type="button">Save as PDF</button>
-    </div>
+    <button id="reader-mode-btn" type="button">
+      <img src="${readerModeIcon}" alt="Reader Mode" />
+      Enter Reader Mode
+    </button>
+    <button id="print-btn" type="button">
+      <img src="${printIcon}" alt="Print Article" />
+      Print Article
+    </button>
+    <button id="save-pdf-btn" type="button">
+      <img src="${savePdfIcon}" alt="Save as PDF" />
+      Save as PDF
+    </button>
   </div>
 `;
 
