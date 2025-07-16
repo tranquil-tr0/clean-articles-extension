@@ -1,40 +1,30 @@
 import './style.css';
-import typescriptLogo from '@/assets/typescript.svg';
-import viteLogo from '/wxt.svg';
 
-// Add UI for article extraction
+// Add UI for entering reader mode
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <div>
-    <h1>WXT + TypeScript</h1>
+    <h1>Clean Articles</h1>
     <div class="card">
-      <button id="extract-article" type="button">Extract article text</button>
-      <div id="article-result" style="margin-top:1em;text-align:left;"></div>
+      <button id="reader-mode-btn" type="button">Enter Reader Mode</button>
     </div>
   </div>
 `;
 
-// Add event listener for the extract button
-const extractBtn = document.getElementById('extract-article')!;
-const resultDiv = document.getElementById('article-result')!;
-extractBtn.addEventListener('click', async () => {
-  resultDiv.textContent = 'Extracting...';
+// Add event listener for the reader mode button
+const readerModeBtn = document.getElementById('reader-mode-btn')!;
+readerModeBtn.addEventListener('click', async () => {
   // Query the active tab
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab.id) {
-    resultDiv.textContent = 'No active tab found.';
     return;
   }
-  // Send message to content script
+
+  // Send message to content script to activate reader mode
   try {
-    const response = await browser.tabs.sendMessage(tab.id, { action: 'extract-article-text' });
-    if (response && response.content) {
-      resultDiv.innerHTML = `<b>${response.title}</b><br><pre style='white-space:pre-wrap;'>${response.content}</pre>`;
-    } else {
-      resultDiv.textContent = 'Could not extract article text.';
-    }
+    await browser.tabs.sendMessage(tab.id, { action: 'extract-article-text' });
+    window.close(); // Close the popup
   } catch (err) {
-    resultDiv.textContent = 'Could not extract article text (error sending message).';
-    return;
+    console.error('Error sending message to content script:', err);
   }
 });
