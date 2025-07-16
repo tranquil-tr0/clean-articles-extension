@@ -1,6 +1,6 @@
 {
-  "name": "wxt-starter",
-  "description": "manifest.json description",
+  "name": "Clean Articles: Reading Mode, Save as PDF, Print Article",
+  "description": "Reading mode implemented using Readability.js with a few other features.",
   "private": true,
   "version": "0.0.0",
   "type": "module",
