@@ -210,7 +210,7 @@ export default defineContentScript({
         } else {
           // Not in reader mode: set flag and trigger extract-article-text
           localStorage.setItem('saveReaderPdfAfterReaderMode', 'true');
-          window.postMessage({ action: 'enter-reader-mode-for-pdf' }, '*');
+          browser.runtime.sendMessage({ action: 'extract-article-text' });
           // No sendResponse here, as the DOM is replaced
         }
         return true;

@@ -77,9 +77,16 @@ savePdfBtn.addEventListener('click', async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab.id) return;
   try {
+    if (!isReaderModeActive) {
+      // Enter reader mode first
+      const response = await browser.tabs.sendMessage(tab.id, { action: 'extract-article-text' });
+      // Optionally, check response for success here
+      // Wait a short moment to ensure reader mode is applied
+      await new Promise(res => setTimeout(res, 300));
+    }
     await browser.tabs.sendMessage(tab.id, { action: 'save-reader-pdf' });
     window.close();
   } catch (err) {
-    console.error('Error sending save-reader-pdf to content script:', err);
+    console.error('Error during save as PDF flow:', err);
   }
 });
