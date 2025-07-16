@@ -183,10 +183,11 @@ export default defineContentScript({
       if (message.action === 'save-reader-pdf') {
         const documentClone = document.cloneNode(true) as Document;
         const article = new Readability(documentClone).parse();
+        const preferences = await preferencesStorage.getValue();
         if (article) {
-          sendResponse({ title: article.title, content: article.content });
+          sendResponse({ title: article.title, content: article.content, preferences });
         } else {
-          sendResponse({ title: document.title, content: '' });
+          sendResponse({ title: document.title, content: '', preferences });
         }
         return true;
       }

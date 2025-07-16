@@ -84,60 +84,104 @@ savePdfBtn.addEventListener('click', async () => {
       return;
     }
 
-    // Convert HTML content to plain text (basic, for MVP)
+    // Convert HTML content to plain text and preserve paragraphs
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = response.content;
-    const text = tempDiv.innerText || '';
+    const paragraphs = Array.from(tempDiv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote'))
+      .map(el => (el as HTMLElement).innerText.trim())
+      .filter(Boolean);
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize = 14;
-    const margin = 40;
-    const maxWidth = width - margin * 2;
 
-    // Simple line wrapping
-    const lines = [];
-    let currentLine = '';
-    for (const word of text.split(/\s+/)) {
-      const testLine = currentLine ? currentLine + ' ' + word : word;
-      const size = font.widthOfTextAtSize(testLine, fontSize);
-      if (size > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
-    }
-    if (currentLine) lines.push(currentLine);
+    // Reader mode-like styling
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontSize = 16;
+    const titleFontSize = 24;
+    const lineHeight = fontSize * 1.6;
+    const margin = 48;
+    const maxTextWidth = Math.min(700, width - margin * 2);
+
+    // Simulate reader mode background (light beige)
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      color: rgb(0.965, 0.96, 0.949), // #f6f5f2
+    });
 
     let y = height - margin;
     let currentPage = page;
 
-    // Draw title on first page
+    // Draw title
     currentPage.drawText(response.title, {
       x: margin,
       y: y,
-      size: fontSize + 4,
+      size: titleFontSize,
       font,
-      color: rgb(0.1, 0.1, 0.1),
+      color: rgb(0.13, 0.13, 0.13),
+      maxWidth: maxTextWidth,
     });
-    y -= fontSize + 12;
+    y -= titleFontSize + 18;
 
-    for (const line of lines) {
-      if (y < margin) {
-        currentPage = pdfDoc.addPage();
-        y = height - margin;
+    for (const para of paragraphs) {
+      // Word wrap each paragraph
+      let words = para.split(/\s+/);
+      let line = '';
+      for (const word of words) {
+        const testLine = line ? line + ' ' + word : word;
+        const size = font.widthOfTextAtSize(testLine, fontSize);
+        if (size > maxTextWidth && line) {
+          if (y < margin + lineHeight) {
+            currentPage = pdfDoc.addPage();
+            currentPage.drawRectangle({
+              x: 0,
+              y: 0,
+              width,
+              height,
+              color: rgb(0.965, 0.96, 0.949),
+            });
+            y = height - margin;
+          }
+          currentPage.drawText(line, {
+            x: margin,
+            y: y,
+            size: fontSize,
+            font,
+            color: rgb(0.15, 0.15, 0.15),
+            maxWidth: maxTextWidth,
+          });
+          y -= lineHeight;
+          line = word;
+        } else {
+          line = testLine;
+        }
       }
-      currentPage.drawText(line, {
-        x: margin,
-        y: y,
-        size: fontSize,
-        font,
-        color: rgb(0.15, 0.15, 0.15),
-      });
-      y -= fontSize + 4;
+      if (line) {
+        if (y < margin + lineHeight) {
+          currentPage = pdfDoc.addPage();
+          currentPage.drawRectangle({
+            x: 0,
+            y: 0,
+            width,
+            height,
+            color: rgb(0.965, 0.96, 0.949),
+          });
+          y = height - margin;
+        }
+        currentPage.drawText(line, {
+          x: margin,
+          y: y,
+          size: fontSize,
+          font,
+          color: rgb(0.15, 0.15, 0.15),
+          maxWidth: maxTextWidth,
+        });
+        y -= lineHeight;
+      }
+      y -= lineHeight * 0.5; // Extra space between paragraphs
     }
 
     const pdfBytes = await pdfDoc.save();
