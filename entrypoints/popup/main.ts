@@ -78,7 +78,9 @@ savePdfBtn.addEventListener('click', async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab.id) return;
   try {
+    console.log('[POPUP DEBUG] Sending save-reader-pdf message to tab', tab.id);
     const response = await browser.tabs.sendMessage(tab.id, { action: 'save-reader-pdf' });
+    console.log('[POPUP DEBUG] Received response from content script:', response);
     if (!response) {
       alert('Failed to communicate with the content script. Please ensure the extension is allowed on this page and try again.');
       return;
@@ -89,7 +91,8 @@ savePdfBtn.addEventListener('click', async () => {
       return;
     }
 
-    // Convert HTML content to plain text (basic, for MVP)
+    // Extract preferences for formatting
+    const preferences = response.preferences || {};
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = response.content;
     const text = tempDiv.innerText || '';
@@ -97,10 +100,47 @@ savePdfBtn.addEventListener('click', async () => {
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize = 14;
+
+    // Font mapping
+    let font;
+    let fontFamily = (preferences.fontFamily || '').toLowerCase();
+    if (fontFamily.includes('serif') && !fontFamily.includes('sans')) {
+      font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+    } else if (fontFamily.includes('mono')) {
+      font = await pdfDoc.embedFont(StandardFonts.Courier);
+    } else {
+      font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    }
+
+    const fontSize = preferences.fontSize || 16;
     const margin = 40;
-    const maxWidth = width - margin * 2;
+    const maxWidth = Math.min(width - margin * 2, preferences.textWidth || 800);
+
+    // Color parsing helper
+    function hexToRgb(hex: string, fallback: ReturnType<typeof rgb>): ReturnType<typeof rgb> {
+      if (!hex) return fallback;
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map((x: string) => x + x).join('');
+      if (c.length !== 6) return fallback;
+      const num = parseInt(c, 16);
+      return rgb(
+        ((num >> 16) & 255) / 255,
+        ((num >> 8) & 255) / 255,
+        (num & 255) / 255
+      );
+    }
+    const textColor = hexToRgb(preferences.textColor, rgb(0.15, 0.15, 0.15));
+    const titleColor = hexToRgb(preferences.textColor, rgb(0.1, 0.1, 0.1));
+    const bgColor = hexToRgb(preferences.backgroundColor, rgb(0.97, 0.96, 0.95));
+
+    // Draw background
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      color: bgColor,
+    });
 
     // Simple line wrapping
     const lines = [];
@@ -126,21 +166,39 @@ savePdfBtn.addEventListener('click', async () => {
       y: y,
       size: fontSize + 4,
       font,
-      color: rgb(0.1, 0.1, 0.1),
+      color: titleColor,
     });
     y -= fontSize + 12;
 
+    // Text alignment
+    let align = (preferences.textAlign || 'left');
     for (const line of lines) {
       if (y < margin) {
         currentPage = pdfDoc.addPage();
+        // Draw background for new page
+        currentPage.drawRectangle({
+          x: 0,
+          y: 0,
+          width,
+          height,
+          color: bgColor,
+        });
         y = height - margin;
       }
+      let x = margin;
+      if (align === 'center') {
+        const lineWidth = font.widthOfTextAtSize(line, fontSize);
+        x = margin + (maxWidth - lineWidth) / 2;
+      } else if (align === 'right') {
+        const lineWidth = font.widthOfTextAtSize(line, fontSize);
+        x = margin + (maxWidth - lineWidth);
+      }
       currentPage.drawText(line, {
-        x: margin,
+        x,
         y: y,
         size: fontSize,
         font,
-        color: rgb(0.15, 0.15, 0.15),
+        color: textColor,
       });
       y -= fontSize + 4;
     }

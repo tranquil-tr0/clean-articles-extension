@@ -174,7 +174,8 @@ export default defineContentScript({
       // TODO: Implement save to PDF functionality here
     }
 
-    browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+    browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+      console.log('[CONTENT DEBUG] onMessage received:', message);
       if (message.action === 'is-reader-mode-active') {
         sendResponse({ active: isReaderModeActive() });
         return true;
@@ -187,24 +188,29 @@ export default defineContentScript({
         return true;
       }
       if (message.action === 'save-reader-pdf') {
-        // Use pdf-lib to generate a PDF that matches reader mode formatting and preferences
-        const documentClone = document.cloneNode(true) as Document;
-        const killSelectors = [
-          'script',
-          'iframe',
-          'object',
-          'embed',
-          'link[rel="import"]'
-        ];
-        killSelectors.forEach(sel => {
-          documentClone.querySelectorAll(sel).forEach(el => el.remove());
+        console.log('[CONTENT DEBUG] save-reader-pdf handler triggered');
+        preferencesStorage.getValue().then(prefs => {
+          const preferences = prefs;
+          const documentClone = document.cloneNode(true) as Document;
+          const killSelectors = [
+            'script',
+            'iframe',
+            'object',
+            'embed',
+            'link[rel="import"]'
+          ];
+          killSelectors.forEach(sel => {
+            documentClone.querySelectorAll(sel).forEach(el => el.remove());
+          });
+          const article = new Readability(documentClone).parse();
+          if (article) {
+            console.log('[CONTENT DEBUG] save-reader-pdf: article extracted');
+            sendResponse({ title: article.title, content: article.content, preferences });
+          } else {
+            console.log('[CONTENT DEBUG] save-reader-pdf: article extraction failed');
+            sendResponse({ title: document.title, content: '', preferences });
+          }
         });
-        const article = new Readability(documentClone).parse();
-        if (article) {
-          sendResponse({ title: article.title, content: article.content });
-        } else {
-          sendResponse({ title: document.title, content: '' });
-        }
         return true;
       }
       if (message.action === 'extract-article-text') {
@@ -212,7 +218,7 @@ export default defineContentScript({
         const article = new Readability(documentClone).parse();
 
         if (article) {
-          const preferences = await preferencesStorage.getValue();
+          preferencesStorage.getValue().then(preferences => {
 
           // Remove all <script>, <iframe>, <object>, <embed>, <link rel="import"> elements
           const killSelectors = [
@@ -575,6 +581,7 @@ newHead.appendChild(style);
           exitBtn.addEventListener('click', () => {
             window.location.reload();
           });
+          }); // closes .then(preferences => { ... })
         }
       }
     });
