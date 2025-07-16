@@ -37,7 +37,18 @@ export default defineContentScript({
             }
             #reader-mode-content.hide-links a { pointer-events: none; text-decoration: none; color: inherit; cursor: default; }
             #reader-mode-content.hide-buttons button { display: none; }
-            #reader-mode-content.hide-images img { display: none; }
+            #reader-mode-content.hide-images img {
+              display: none;
+            }
+            #reader-mode-content img {
+              display: block;
+              max-width: 100%;
+              height: auto;
+              margin: 1em auto;
+            }
+            #reader-mode-content.hide-captions figcaption {
+              display: none;
+            }
           `;
 
           document.head.innerHTML = '';
@@ -45,9 +56,10 @@ export default defineContentScript({
 
           document.body.innerHTML = `
             <div id="reader-mode-controls">
-              <label><input type="checkbox" id="toggle-links"> Show Links</label>
-              <label><input type="checkbox" id="toggle-buttons"> Show Buttons</label>
-              <label><input type="checkbox" id="toggle-images" checked> Show Images</label>
+              <label><input type="checkbox" id="toggle-links"> Hide Links</label>
+              <label><input type="checkbox" id="toggle-buttons" checked> Hide Buttons</label>
+              <label><input type="checkbox" id="toggle-images"> Hide Images</label>
+              <label><input type="checkbox" id="toggle-captions"> Hide Image Captions</label>
             </div>
             <div id="reader-mode-container">
               <h1>${article.title}</h1>
@@ -59,20 +71,25 @@ export default defineContentScript({
           const toggleLinks = document.getElementById('toggle-links') as HTMLInputElement;
           const toggleButtons = document.getElementById('toggle-buttons') as HTMLInputElement;
           const toggleImages = document.getElementById('toggle-images') as HTMLInputElement;
+          const toggleCaptions = document.getElementById('toggle-captions') as HTMLInputElement;
 
           // Initial state
-          contentDiv.classList.add('hide-links', 'hide-buttons');
+          contentDiv.classList.add('hide-buttons');
 
           toggleLinks.addEventListener('change', () => {
-            contentDiv.classList.toggle('hide-links', !toggleLinks.checked);
+            contentDiv.classList.toggle('hide-links', toggleLinks.checked);
           });
 
           toggleButtons.addEventListener('change', () => {
-            contentDiv.classList.toggle('hide-buttons', !toggleButtons.checked);
+            contentDiv.classList.toggle('hide-buttons', toggleButtons.checked);
           });
 
           toggleImages.addEventListener('change', () => {
-            contentDiv.classList.toggle('hide-images', !toggleImages.checked);
+            contentDiv.classList.toggle('hide-images', toggleImages.checked);
+          });
+
+          toggleCaptions.addEventListener('change', () => {
+            contentDiv.classList.toggle('hide-captions', toggleCaptions.checked);
           });
         }
       }
