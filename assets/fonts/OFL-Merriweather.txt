@@ -1,0 +1,6 @@
+Merriweather font license (SIL Open Font License v1.1)
+
+Copyright 2016 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is available with a FAQ at: http://scripts.sil.org/OFL
