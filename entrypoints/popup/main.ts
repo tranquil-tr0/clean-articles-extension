@@ -3,6 +3,7 @@ import readerModeIcon from '../../assets/file-text.svg';
 import printIcon from '../../assets/printer.svg';
 import savePdfIcon from '../../assets/file-type-pdf.svg';
 import html2pdf from 'html2pdf.js';
+import { formatArticleForPdf, ReaderModePreferences } from '../formatForPdf';
 
 // Add UI for entering reader mode
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -88,8 +89,33 @@ savePdfBtn.addEventListener('click', async () => {
       return;
     }
 
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = response.content;
+    // Format the article HTML for PDF export
+    const formattedHtml = await formatArticleForPdf(
+      { title: response.title, content: response.content },
+      response.preferences as ReaderModePreferences
+    );
+
+    // Create an invisible iframe to isolate styles
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    document.body.appendChild(iframe);
+
+    // Write the formatted HTML into the iframe
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      alert('Failed to create iframe for PDF export.');
+      document.body.removeChild(iframe);
+      return;
+    }
+    iframeDoc.open();
+    iframeDoc.write(formattedHtml);
+    iframeDoc.close();
+
+    // Wait for fonts/images to load
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Use html2pdf.js to export the HTML to PDF
     await html2pdf()
@@ -99,9 +125,10 @@ savePdfBtn.addEventListener('click', async () => {
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
       })
-      .from(tempDiv)
+      .from(iframeDoc.body)
       .save();
 
+    document.body.removeChild(iframe);
     window.close();
   } catch (err) {
     alert('Error saving PDF: ' + err);

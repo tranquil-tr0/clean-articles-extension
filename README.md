@@ -1,0 +1,2 @@
+I am dropping this project for the time being. I don't have a urgent need for it and PDF implementation is being very annoying. - note: maybe just replace with print and get it done with
+Will publish the limited version of the project
