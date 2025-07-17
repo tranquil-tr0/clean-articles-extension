@@ -1,1 +1,2 @@
 extend the pdf export font to include possible use of all other bundled fonts; explore use of woff2-rs to avoid bundling of ttfs
+not all options exist in the pdf export functionality (there is no font color, for example)

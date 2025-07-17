@@ -194,21 +194,44 @@ export default defineContentScript({
           const documentClone = document.cloneNode(true) as Document;
           const killSelectors = [
             'script',
-            'iframe',
-            'object',
-            'embed',
-            'link[rel="import"]'
           ];
           killSelectors.forEach(sel => {
             documentClone.querySelectorAll(sel).forEach(el => el.remove());
           });
           const article = new Readability(documentClone).parse();
           if (article) {
-            console.log('[CONTENT DEBUG] save-reader-pdf: article extracted');
-            sendResponse({ title: article.title, content: article.content, preferences });
+            // Inline all images as data URLs
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = article.content ?? '';
+            const imgPromises = Array.from(wrapper.querySelectorAll('img')).map(async img => {
+              try {
+                // Only process if not already a data URL
+                if (!img.src.startsWith('data:')) {
+                  // Try to fetch the image as a Blob and convert to data URL
+                  const response = await fetch(img.src, { mode: 'cors' });
+                  if (response.ok) {
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    const dataUrlPromise = new Promise<string>((resolve, reject) => {
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.onerror = reject;
+                    });
+                    reader.readAsDataURL(blob);
+                    const dataUrl = await dataUrlPromise;
+                    img.src = dataUrl;
+                  }
+                  // If fetch fails, leave src as is
+                }
+              } catch (e) {
+                // If image fails to load or convert, leave src as is
+              }
+            });
+            Promise.all(imgPromises).then(() => {
+              sendResponse({ title: article.title, content: wrapper.innerHTML, preferences, baseUrl: location.href });
+            });
           } else {
             console.log('[CONTENT DEBUG] save-reader-pdf: article extraction failed');
-            sendResponse({ title: document.title, content: '', preferences });
+            sendResponse({ title: document.title, content: '', preferences, baseUrl: location.href });
           }
         });
         return true;
