@@ -48,131 +48,7 @@ export default defineContentScript({
       return document.documentElement.hasAttribute('data-reader-mode');
     }
 
-    // Listen for message to enter reader mode for PDF
-    window.addEventListener('message', async (event) => {
-      if (event.data && event.data.action === 'enter-reader-mode-for-pdf') {
-        // This triggers the extract-article-text logic
-        const documentClone = document.cloneNode(true) as Document;
-        console.log('[PDF DEBUG] Starting Readability.parse()');
-        const article = new Readability(documentClone).parse();
-        if (!article) {
-          console.error('[PDF DEBUG] Readability.parse() returned null or failed to extract article.');
-        } else {
-          console.log('[PDF DEBUG] Readability.parse() succeeded:', article);
-        }
 
-        if (article) {
-          const preferences = await preferencesStorage.getValue();
-
-          // Remove all <script>, <iframe>, <object>, <embed>, <link rel="import"> elements
-          const killSelectors = [
-            'script',
-            'iframe',
-            'object',
-            'embed',
-            'link[rel="import"]'
-          ];
-          killSelectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(el => el.remove());
-          });
-
-          // Clear all intervals and timeouts
-          for (let i = 1; i < 99999; i++) {
-            window.clearInterval(i);
-            window.clearTimeout(i);
-          }
-
-          // Remove all children from <html> (documentElement)
-          while (document.documentElement.firstChild) {
-            document.documentElement.removeChild(document.documentElement.firstChild);
-          }
-
-          // Create new <head> and <body>
-          const newHead = document.createElement('head');
-          const newBody = document.createElement('body');
-          document.documentElement.appendChild(newHead);
-          document.documentElement.appendChild(newBody);
-          // Mark Reader Mode as active
-          document.documentElement.setAttribute('data-reader-mode', 'true');
-
-          // Insert style into new head
-          const style = document.createElement('style');
-          // Use imported font URLs for @font-face rules
-          style.textContent = `
-    /* Local bundled fonts */
-    @font-face {
-      font-family: 'Inter';
-      src: url('${interRegularUrl}') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Inter';
-      src: url('${interBoldUrl}') format('woff2');
-      font-weight: 700;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Roboto';
-      src: url('${robotoRegularUrl}') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Roboto';
-      src: url('${robotoBoldUrl}') format('woff2');
-      font-weight: 700;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Merriweather';
-      src: url('${merriweatherRegularUrl}') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Merriweather';
-      src: url('${merriweatherBoldUrl}') format('woff2');
-      font-weight: 700;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Lora';
-      src: url('${loraRegularUrl}') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: 'Lora';
-      src: url('${loraBoldUrl}') format('woff2');
-      font-weight: 700;
-      font-style: normal;
-      font-display: swap;
-    }
-    `;
-          newHead.appendChild(style);
-
-          // ... (rest of the extract-article-text logic, including rendering the article and controls)
-          // After entering reader mode, the rest of the script will run as normal
-        }
-      }
-    });
-
-    // On load, if in reader mode and saveReaderPdfAfterReaderMode is set, export PDF and clear flag
-    if (
-      isReaderModeActive() &&
-      localStorage.getItem('saveReaderPdfAfterReaderMode') === 'true'
-    ) {
-      localStorage.removeItem('saveReaderPdfAfterReaderMode');
-      // TODO: Implement save to PDF functionality here
-    }
 
     browser.runtime.onMessage.addListener(function (message, sender, sendResponse) {
       console.log('[CONTENT DEBUG] onMessage received:', message);
@@ -187,17 +63,6 @@ export default defineContentScript({
         sendResponse({ exited: true });
         return true;
       }
-      if (message.action === 'save-reader-pdf') {
-        console.log('[CONTENT DEBUG] save-reader-pdf handler triggered');
-        preferencesStorage.getValue().then(prefs => {
-          const preferences = prefs;
-          const documentClone = document.cloneNode(true) as Document;
-          const killSelectors = [
-            'script',
-          ];
-          killSelectors.forEach(sel => {
-            documentClone.querySelectorAll(sel).forEach(el => el.remove());
-          });
           const article = new Readability(documentClone).parse();
           if (article) {
             // Inline all images as data URLs
@@ -225,18 +90,12 @@ export default defineContentScript({
               } catch (e) {
                 // If image fails to load or convert, leave src as is
               }
-            });
-            Promise.all(imgPromises).then(() => {
-              sendResponse({ title: article.title, content: wrapper.innerHTML, preferences, baseUrl: location.href });
-            });
-          } else {
-            console.log('[CONTENT DEBUG] save-reader-pdf: article extraction failed');
-            sendResponse({ title: document.title, content: '', preferences, baseUrl: location.href });
-          }
-        });
-        return true;
-      }
-      if (message.action === 'extract-article-text') {
+              if (message.action === 'trigger-print') {
+                window.print();
+                sendResponse({ printed: true });
+                return true;
+              }
+              if (message.action === 'extract-article-text') {
         const documentClone = document.cloneNode(true) as Document;
         const article = new Readability(documentClone).parse();
 
@@ -608,6 +467,6 @@ newHead.appendChild(style);
         }
       }
     });
-  },
+  }
 });
 

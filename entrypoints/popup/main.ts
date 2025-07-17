@@ -1,9 +1,6 @@
 import './style.css';
 import readerModeIcon from '../../assets/file-text.svg';
 import printIcon from '../../assets/printer.svg';
-import savePdfIcon from '../../assets/file-type-pdf.svg';
-import html2pdf from 'html2pdf.js';
-import { formatArticleForPdf, ReaderModePreferences } from '../formatForPdf';
 
 // Add UI for entering reader mode
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -17,10 +14,6 @@ app.innerHTML = `
     <button id="print-btn" type="button">
       <img src="${printIcon}" alt="Print Article" />
       Print Article
-    </button>
-    <button id="save-pdf-btn" type="button">
-      <img src="${savePdfIcon}" alt="Save as PDF" />
-      Save as PDF
     </button>
   </div>
 `;
@@ -69,8 +62,11 @@ readerModeBtn.addEventListener('click', async () => {
 
 // Add event listener for the print button
 const printBtn = document.getElementById('print-btn')!;
-printBtn.addEventListener('click', () => {
-  window.print();
+printBtn.addEventListener('click', async () => {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab.id) return;
+  await browser.tabs.sendMessage(tab.id, { action: 'trigger-print' });
+  window.close();
 });
 
 // Add event listener for the save as PDF button
